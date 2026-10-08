@@ -1,0 +1,36 @@
+[project]
+name = "reportlens"
+version = "0.1.0"
+description = "Question answering over Canadian public companies' annual reports, showcasing 10 RAG techniques."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "openai>=1.50",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.4",
+    "psycopg[binary]>=3.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reportlens"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

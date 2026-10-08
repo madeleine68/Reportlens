@@ -1,0 +1,22 @@
+# Secrets
+.env
+
+# Data (PDFs and parsed output are never committed)
+data/raw/
+data/parsed/
+*.pdf
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

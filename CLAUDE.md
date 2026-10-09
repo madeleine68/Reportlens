@@ -80,6 +80,7 @@ reportlens/
 uv sync                                              # install deps
 docker compose up -d                                 # start postgres (+ neo4j later)
 uv run python scripts/ingest_all.py                  # parse, chunk, embed, load
+uv run python scripts/ask.py "What was RBC's net income in 2023?"   # ask one question
 uv run python evals/run_evals.py --name "baseline"   # run evals, append to results.md
 uv run uvicorn reportlens.api.main:app --reload      # start API
 uv run pytest                                        # fast tests
@@ -106,7 +107,7 @@ Keep this section up to date when commands change.
 - [x] Parse PDFs with Docling, keeping page numbers (light mode; see DECISIONS.md)
 - [x] Naive chunking (450 tokens, 50 overlap; see DECISIONS.md)
 - [x] Embed and store in pgvector with metadata (company, year, page, section)
-- [ ] Retrieve top-5 by vector similarity, answer with page citations
+- [x] Retrieve top-5 by vector similarity, answer with page citations
 - [ ] Eval runner: recall@5, MRR, answer correctness (LLM judge), faithfulness, latency, cost
 - [ ] Record the baseline row in `evals/results.md`
 

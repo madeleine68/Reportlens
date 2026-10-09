@@ -55,3 +55,15 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** One `schema.sql` (`CREATE ... IF NOT EXISTS`), simple to read and explain; revisit if the schema starts changing often. A `documents` row per report stores the PDF hash plus an `ingest_config` fingerprint (converter and extract versions, chunk settings, embedding model); if it matches, the report is skipped, otherwise its chunks are replaced in one transaction. HNSW cosine index, matching what a production setup would use, even though an exact scan over ~6k rows is also fast. Company, year and section are columns on `chunks` so Phase 2 filters are plain `WHERE` clauses. Queries get bge's instruction prefix via a separate `embed_query()`; passages don't.
 
 **Eval evidence:** none yet. 12 reports → 5,991 chunks loaded in ~19 min; unchanged re-run takes 26 s (mostly imports).
+
+## 2026-10-09 — Citations as [n] markers parsed in code
+
+**Context:** Answers must cite the pages they come from, and a citation must never point at something that wasn't retrieved.
+
+**Options considered:**
+- Structured JSON output (`{"answer": ..., "sources": [...]}`): explicit, but harder to read, and JSON reliability varies across the Groq/Gemini/Ollama models we can switch between.
+- Plain text with `[n]` markers after each claim, parsed in code: readable, works with any chat model, and checkable.
+
+**Decision:** Numbered sources in the prompt, `[n]` markers in the answer, parsed by `parse_citations()`. Markers outside 1..k are dropped and logged, so citations can't be invented. Full-width `【n】` markers (a gpt-oss habit, seen in the first real test) are normalized to `[n]`. A fixed refusal sentence (`prompts.NOT_FOUND`) marks "not in the reports", so the eval can score out-of-corpus questions. A citation lists every page of its chunk, since chunks can span 2–3 pages.
+
+**Eval evidence:** none yet. Manual check: 4 questions; 2 answered with correct citations (Bell subscribers verified against BCE 2024 p. 8), 1 correct refusal (out of corpus), 1 refusal caused by a retrieval miss (RBC 2023 net income).

@@ -105,7 +105,7 @@ Keep this section up to date when commands change.
 
 - [x] Parse PDFs with Docling, keeping page numbers (light mode; see DECISIONS.md)
 - [x] Naive chunking (450 tokens, 50 overlap; see DECISIONS.md)
-- [ ] Embed and store in pgvector with metadata (company, year, page, section)
+- [x] Embed and store in pgvector with metadata (company, year, page, section)
 - [ ] Retrieve top-5 by vector similarity, answer with page citations
 - [ ] Eval runner: recall@5, MRR, answer correctness (LLM judge), faithfulness, latency, cost
 - [ ] Record the baseline row in `evals/results.md`
@@ -161,6 +161,8 @@ Keep this section up to date when commands change.
   **Decision:** ...
   **Eval evidence (if any):** ...
   ```
+
+- For every implementation phase in ReportLens, include a clear Mermaid diagram in README.md illustrating the workflow, key components, and data flow from input to output. Keep the diagrams beginner-friendly, explain each step briefly, and update them as new features are implemented so the README always reflects the actual project state.
 
 ### Human-owned pieces (do not implement unless explicitly asked)
 

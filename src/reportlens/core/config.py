@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # Embeddings and chunking. bge-small reads at most 512 tokens, so chunks stay well under
     # that to leave room for the Phase 2 context prefix.
     embedding_model: str = "BAAI/bge-small-en-v1.5"
+    # bge models expect this instruction before queries (not passages); "" for models that don't.
+    embedding_query_prefix: str = "Represent this sentence for searching relevant passages: "
     chunk_tokens: int = 450
     chunk_overlap: int = 50
 

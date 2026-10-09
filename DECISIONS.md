@@ -42,3 +42,16 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** 450 tokens with 50 overlap, counted with the embedding model's own tokenizer, configurable via `CHUNK_TOKENS` / `CHUNK_OVERLAP`. Chunks are fixed windows over each report's joined text, ignoring headings and tables, so Phase 2 has an honest baseline to beat. Each chunk lists every page it touches, for citations.
 
 **Eval evidence:** none yet. On 12 reports: 5,991 chunks, ~1 s per report, longest chunk re-tokenizes to 452 tokens (limit 512). About 46% of chunks span more than one page.
+
+## 2026-10-09 — Postgres schema and embedding storage
+
+**Context:** Chunks need to be stored with their vectors and the metadata Phase 2 will filter on, and re-running ingestion must not re-embed unchanged reports (~1–2 min each on CPU).
+
+**Options considered:**
+- Migration tool (Alembic) vs one idempotent `schema.sql` applied on connect.
+- Per-chunk embedding cache (hash of chunk text) vs per-report fingerprint.
+- No vector index (exact scan) vs HNSW.
+
+**Decision:** One `schema.sql` (`CREATE ... IF NOT EXISTS`), simple to read and explain; revisit if the schema starts changing often. A `documents` row per report stores the PDF hash plus an `ingest_config` fingerprint (converter and extract versions, chunk settings, embedding model); if it matches, the report is skipped, otherwise its chunks are replaced in one transaction. HNSW cosine index, matching what a production setup would use, even though an exact scan over ~6k rows is also fast. Company, year and section are columns on `chunks` so Phase 2 filters are plain `WHERE` clauses. Queries get bge's instruction prefix via a separate `embed_query()`; passages don't.
+
+**Eval evidence:** none yet. 12 reports → 5,991 chunks loaded in ~19 min; unchanged re-run takes 26 s (mostly imports).

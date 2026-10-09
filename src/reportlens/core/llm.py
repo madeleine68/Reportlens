@@ -33,7 +33,11 @@ class LLMResponse(BaseModel):
 @lru_cache
 def _client() -> OpenAI:
     settings = get_settings()
-    return OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key.get_secret_value())
+    return OpenAI(
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key.get_secret_value(),
+        max_retries=settings.llm_max_retries,
+    )
 
 
 def _model_for(tier: Tier) -> str:

@@ -67,3 +67,20 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** Numbered sources in the prompt, `[n]` markers in the answer, parsed by `parse_citations()`. Markers outside 1..k are dropped and logged, so citations can't be invented. Full-width `【n】` markers (a gpt-oss habit, seen in the first real test) are normalized to `[n]`. A fixed refusal sentence (`prompts.NOT_FOUND`) marks "not in the reports", so the eval can score out-of-corpus questions. A citation lists every page of its chunk, since chunks can span 2–3 pages.
 
 **Eval evidence:** none yet. Manual check: 4 questions; 2 answered with correct citations (Bell subscribers verified against BCE 2024 p. 8), 1 correct refusal (out of corpus), 1 refusal caused by a retrieval miss (RBC 2023 net income).
+
+## 2026-10-09 — Eval runner design
+
+**Context:** Every technique from Phase 2 on must be measured against the baseline, so the runner needs metrics that are cheap, repeatable, and easy to explain.
+
+**Options considered:**
+- Score everything with an LLM judge vs compute retrieval metrics in code.
+- Judge on the main model (stronger) vs the fast model (`CLAUDE.md`: grading goes on the cheaper model).
+- Ragas or a similar eval library vs a small hand-written runner.
+
+**Decision:** Hand-written, so every number can be explained. Recall@5 and MRR are computed in code: a retrieved chunk matches an expected source when company and year match and the expected page is among the chunk's pages. Correctness and faithfulness use an LLM judge on the fast model, with JSON output validated by Pydantic and the judge giving its reason before its verdict. Refusals are scored without a judge: correct for `out_of_corpus`, 0 otherwise. Each run's per-question details go to `evals/runs/`; only runs on the owner's `questions.jsonl` add a row to `results.md`. Eval logic lives in `src/reportlens/evals/` (importable and testable); `evals/run_evals.py` is a thin CLI.
+
+**Caveats found in the smoke run:**
+- Groq's free-tier rate limits make the client wait and retry, so p50 latency (1.5 s per answer when idle, 12.6 s in the run) mostly measures waiting. Compare latency only between runs on the same tier.
+- Recall needs every page that contains the answer: s03's answer came from a highlights page that wasn't listed as a source, so it scored recall 0 with a correct answer.
+
+**Eval evidence:** Smoke set (6 questions, not the eval set): recall@5 0.20, MRR 0.20, correctness 0.50, faithfulness 1.00. The run also caught a citation format (`[3†L13-L16]`) the parser missed, now fixed.

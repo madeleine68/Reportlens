@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr
     llm_model_main: str
     llm_model_fast: str
+    # Retries on rate limits / transient errors (the SDK waits between tries). Free tiers need more.
+    llm_max_retries: int = 6
+    # Main-model prices in USD per million tokens, for cost/query in evals. 0 = free tier.
+    llm_price_input_per_mtok: float = 0.0
+    llm_price_output_per_mtok: float = 0.0
 
     # Embeddings and chunking. bge-small reads at most 512 tokens, so chunks stay well under
     # that to leave room for the Phase 2 context prefix.

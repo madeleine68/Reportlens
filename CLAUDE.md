@@ -63,12 +63,14 @@ reportlens/
 │   ├── retrieval/        # vector.py, keyword.py, hybrid.py, rerank.py, filters.py
 │   ├── sources/          # sql_tool.py, graph_tool.py, web_tool.py
 │   ├── agents/           # graph.py, router.py, self_rag.py, corrective.py
-│   ├── generation/       # answer.py (answers with page citations)
+│   ├── generation/       # answer.py (answers with page citations), prompts.py
+│   ├── evals/            # questions.py, metrics.py, judge.py, runner.py (eval logic)
 │   └── api/              # main.py (FastAPI)
 ├── evals/
 │   ├── questions.jsonl   # OWNED BY THE HUMAN, see rules below
-│   ├── run_evals.py
-│   ├── metrics.py
+│   ├── questions.smoke.jsonl  # smoke test for the runner only; never recorded in results.md
+│   ├── run_evals.py      # CLI; logic lives in src/reportlens/evals/
+│   ├── runs/             # per-question details of each run (answers, scores, judge reasons)
 │   └── results.md        # one row per experiment, append-only
 ├── scripts/              # one-off CLI scripts (ingest_all.py, etc.)
 └── tests/
@@ -82,6 +84,7 @@ docker compose up -d                                 # start postgres (+ neo4j l
 uv run python scripts/ingest_all.py                  # parse, chunk, embed, load
 uv run python scripts/ask.py "What was RBC's net income in 2023?"   # ask one question
 uv run python evals/run_evals.py --name "baseline"   # run evals, append to results.md
+uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.jsonl  # runner smoke test
 uv run uvicorn reportlens.api.main:app --reload      # start API
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
@@ -108,7 +111,7 @@ Keep this section up to date when commands change.
 - [x] Naive chunking (450 tokens, 50 overlap; see DECISIONS.md)
 - [x] Embed and store in pgvector with metadata (company, year, page, section)
 - [x] Retrieve top-5 by vector similarity, answer with page citations
-- [ ] Eval runner: recall@5, MRR, answer correctness (LLM judge), faithfulness, latency, cost
+- [x] Eval runner: recall@5, MRR, answer correctness (LLM judge), faithfulness, latency, cost
 - [ ] Record the baseline row in `evals/results.md`
 
 ### Phase 2: Better retrieval

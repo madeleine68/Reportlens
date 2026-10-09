@@ -19,8 +19,14 @@ Chat = Callable[..., llm.LLMResponse]
 
 # Matches [1] and grouped markers like [1, 3].
 _MARKER = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
-# Some models (e.g. gpt-oss) write full-width brackets like 【1】; normalize them to [1].
+# gpt-oss sometimes writes markers as 【1】 or [1†L13-L16] (its browsing-tool style).
 _FULL_WIDTH_BRACKETS = str.maketrans({"\u3010": "[", "\u3011": "]"})
+_DAGGER_SUFFIX = re.compile(r"\[(\d+)\u2020[^\]]*\]")
+
+
+def normalize_markers(text: str) -> str:
+    """Rewrite model-specific citation markers as plain [n]."""
+    return _DAGGER_SUFFIX.sub(r"[\1]", text.translate(_FULL_WIDTH_BRACKETS))
 
 
 class Citation(BaseModel):
@@ -125,7 +131,7 @@ def answer_question(
         )
 
     reply = chat(build_messages(question, chunks), tier="main")
-    text = reply.text.translate(_FULL_WIDTH_BRACKETS).strip()
+    text = normalize_markers(reply.text).strip()
     found = not is_not_found(text)
     return Answer(
         question=question,

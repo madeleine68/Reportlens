@@ -1,0 +1,9 @@
+// SMOKE TEST ONLY: checks that the eval runner works end to end. NOT the eval set.
+// The real questions live in evals/questions.jsonl and are written by the project owner.
+// Runs on this file never touch evals/results.md. Answers and pages verified against the PDFs.
+{"id": "s01", "question": "What was RBC's net income in fiscal 2023?", "type": "numeric", "expected_answer": "$14,866 million (adjusted net income was $16,083 million)", "sources": [{"company": "rbc", "year": 2023, "page": 26}], "notes": "smoke"}
+{"id": "s02", "question": "How did RBC's net income in 2023 compare with the previous year?", "type": "trend", "expected_answer": "Down $941 million or 6% from last year", "sources": [{"company": "rbc", "year": 2023, "page": 26}], "notes": "smoke"}
+{"id": "s03", "question": "What was Scotiabank's CET1 ratio at the end of fiscal 2024?", "type": "numeric", "expected_answer": "13.1% as at October 31, 2024 (13.0% the year before)", "sources": [{"company": "scotiabank", "year": 2024, "page": 29}], "notes": "smoke"}
+{"id": "s04", "question": "How many mobile phone subscribers did Bell have in 2024?", "type": "numeric", "expected_answer": "10.29 million", "sources": [{"company": "bce", "year": 2024, "page": 8}], "notes": "smoke"}
+{"id": "s05", "question": "What are the pillars of Scotiabank's strategy in 2024?", "type": "lookup", "expected_answer": "Grow and scale in priority markets; earn primary client relationships; make it easy to do business with us; win as one team", "sources": [{"company": "scotiabank", "year": 2024, "page": 2}], "notes": "smoke"}
+{"id": "s06", "question": "Who won the 2023 Stanley Cup?", "type": "out_of_corpus", "expected_answer": "", "sources": [], "notes": "smoke"}

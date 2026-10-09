@@ -84,6 +84,14 @@ def test_full_width_markers_are_normalized_and_cited() -> None:
     assert [c.number for c in result.citations] == [2]
 
 
+def test_dagger_markers_are_normalized_and_cited() -> None:
+    chat = FakeChat("Net income fell 6% [3\u2020L13-L16][1\u2020L1-L4].")
+    result = answer_question(None, "q?", retrieve=lambda conn, q: CHUNKS, chat=chat)
+
+    assert result.text == "Net income fell 6% [3][1]."
+    assert [c.number for c in result.citations] == [3, 1]
+
+
 @pytest.mark.parametrize("reply", [NOT_FOUND, "I couldn’t find this in the annual reports."])
 def test_refusal_is_marked_not_found_with_no_citations(reply: str) -> None:
     result = answer_question(

@@ -24,7 +24,7 @@ uv run python scripts/ask.py "How many wireless subscribers did Bell have in 202
 | Phase | What it adds | Status |
 |-------|--------------|--------|
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
-| 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | 🟡 In progress: ingestion, search and cited answers built; evals next |
+| 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | 🟡 In progress: full pipeline and eval runner built; waiting on the eval questions for the baseline |
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ⬜ Planned |
 | 3. Structured data | Real tables, SQL tool, knowledge graph | ⬜ Planned |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
@@ -93,8 +93,8 @@ flowchart TD
 
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
-    class pdf,parse,cache,chunk,embed,store,q,qembed,search,gen,out done
-    class qs,run,results planned
+    class pdf,parse,cache,chunk,embed,store,q,qembed,search,gen,out,run done
+    class qs,results planned
 ```
 
 1. **Parse** (`ingest/parse.py`): Docling reads the PDF's layout and returns blocks of text, each tagged with its page number and the heading it sits under. Page headers and footers are dropped. The result is cached, so each PDF is parsed only once (about 6–7 minutes per report on a laptop CPU).
@@ -104,7 +104,7 @@ flowchart TD
 5. **Embed the question** (`ingest/embed.py`): the question becomes a vector with the same model, plus the short instruction bge expects in front of questions.
 6. **Vector search** (`retrieval/vector.py`): Postgres finds the 5 chunks whose vectors are closest to the question's, using an HNSW index (a fast nearest-neighbour index). A search takes well under a second.
 7. **Generate** (`generation/answer.py`): the LLM gets the 5 chunks as numbered sources and must answer from them only, putting a marker like `[2]` after each claim. The code turns those markers into citations (company, year, pages) and drops any that point to a source that doesn't exist. If the sources don't contain the answer, the LLM replies with a fixed "couldn't find this" sentence instead of guessing.
-8. **Evaluate** *(planned)*: a fixed set of questions measures how good retrieval and answers are, so every later change can be compared against this baseline.
+8. **Evaluate** (`evals/run_evals.py`): every question in a fixed set is answered and scored. Recall@5 and MRR check, without any LLM, whether retrieval found the expected pages. An LLM judge grades correctness against the expected answer, and checks faithfulness (is every claim backed by the retrieved chunks?). Latency and cost are recorded too. Each run's details are saved in `evals/runs/`, and a summary row goes into `evals/results.md`, so every later change can be compared against this baseline. *Still to do:* the real question set (written by the project owner) and the first baseline row.
 
 ### Phase 2: Better retrieval ⬜
 

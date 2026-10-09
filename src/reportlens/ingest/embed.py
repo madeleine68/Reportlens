@@ -24,7 +24,11 @@ def _model() -> SentenceTransformer:
 def _encode(texts: list[str], batch_size: int) -> np.ndarray:
     start = time.perf_counter()
     vectors = _model().encode(
-        texts, batch_size=batch_size, normalize_embeddings=True, convert_to_numpy=True
+        texts,
+        batch_size=batch_size,
+        normalize_embeddings=True,
+        convert_to_numpy=True,
+        show_progress_bar=False,  # timing is logged below instead
     )
     log.info("embed texts=%d latency=%.1fs", len(texts), time.perf_counter() - start)
     return vectors

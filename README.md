@@ -21,7 +21,7 @@ uv run python scripts/ingest_all.py --companies bce,rbc,scotiabank
 | Phase | What it adds | Status |
 |-------|--------------|--------|
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
-| 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | 🟡 In progress: ingestion built; retrieval, answers and evals next |
+| 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | 🟡 In progress: ingestion and vector search built; answers and evals next |
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ⬜ Planned |
 | 3. Structured data | Real tables, SQL tool, knowledge graph | ⬜ Planned |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
@@ -90,16 +90,16 @@ flowchart TD
 
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
-    class pdf,parse,cache,chunk,embed,store done
-    class q,qembed,search,gen,out,qs,run,results planned
+    class pdf,parse,cache,chunk,embed,store,q,qembed,search done
+    class gen,out,qs,run,results planned
 ```
 
 1. **Parse** (`ingest/parse.py`): Docling reads the PDF's layout and returns blocks of text, each tagged with its page number and the heading it sits under. Page headers and footers are dropped. The result is cached, so each PDF is parsed only once (about 6–7 minutes per report on a laptop CPU).
 2. **Chunk** (`ingest/chunking.py`): the report's text is cut into equal 450-token pieces, ignoring headings on purpose. That's what makes this the "naive" baseline. Each chunk remembers every page it came from, for citations.
 3. **Embed** (`ingest/embed.py`): a small embedding model turns each chunk into a vector, so that chunks with similar meaning get similar vectors.
 4. **Store** (`ingest/load.py`): chunks, vectors and metadata go into Postgres. A report that hasn't changed is skipped, so re-running is fast.
-5. **Embed the question** *(planned)*: the question becomes a vector with the same model.
-6. **Vector search** *(planned)*: Postgres finds the 5 chunks whose vectors are closest to the question's.
+5. **Embed the question** (`ingest/embed.py`): the question becomes a vector with the same model, plus the short instruction bge expects in front of questions.
+6. **Vector search** (`retrieval/vector.py`): Postgres finds the 5 chunks whose vectors are closest to the question's, using an HNSW index (a fast nearest-neighbour index). A search takes well under a second.
 7. **Generate** *(planned)*: the LLM writes an answer from those 5 chunks only, citing pages.
 8. **Evaluate** *(planned)*: a fixed set of questions measures how good retrieval and answers are, so every later change can be compared against this baseline.
 

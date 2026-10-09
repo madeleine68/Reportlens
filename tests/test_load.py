@@ -1,41 +1,17 @@
 """Integration tests against a real Postgres (a separate reportlens_test database)."""
 
-from collections.abc import Iterator
-
 import numpy as np
 import psycopg
 import pytest
 
 from reportlens.core.config import get_settings
-from reportlens.core.db import connect
 from reportlens.ingest.load import document_id, ingest_config, is_current, load_document
 from reportlens.ingest.models import Chunk, ParsedDocument
-
-TEST_DB = "reportlens_test"
 
 
 def fake_embed(texts: list[str]) -> np.ndarray:
     """One-hot vectors, so each chunk is distinguishable without loading a model."""
     return np.eye(len(texts), 384)
-
-
-@pytest.fixture
-def conn(monkeypatch: pytest.MonkeyPatch) -> Iterator[psycopg.Connection]:
-    try:
-        with psycopg.connect(get_settings().database_url, autocommit=True) as admin:
-            exists = admin.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s", (TEST_DB,)
-            ).fetchone()
-            if not exists:
-                admin.execute(f"CREATE DATABASE {TEST_DB}")
-    except psycopg.OperationalError:
-        pytest.skip("Postgres not reachable; start it with `docker compose up -d`")
-
-    monkeypatch.setenv("POSTGRES_DB", TEST_DB)
-    get_settings.cache_clear()
-    with connect() as test_conn:
-        test_conn.execute("TRUNCATE documents CASCADE")
-        yield test_conn
 
 
 def _doc(sha256: str = "abc") -> ParsedDocument:

@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     chunk_tokens: int = 450
     chunk_overlap: int = 50
 
+    # Retrieval
+    retrieval_top_k: int = 5
+
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"
 

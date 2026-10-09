@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,6 +47,8 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 5
     # Phase 2: LLM-extracted company/year filters (off = Phase 1 baseline behaviour).
     retrieval_use_filters: bool = False
+    # Which retriever answers use: "vector" (Phase 1) or "keyword" (Postgres full-text).
+    retrieval_mode: Literal["vector", "keyword"] = "vector"
 
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"

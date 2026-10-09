@@ -9,7 +9,7 @@ import psycopg
 from reportlens.core.config import get_settings
 from reportlens.core.logging import get_logger
 from reportlens.ingest.embed import embed_query
-from reportlens.retrieval.filters import QueryFilters
+from reportlens.retrieval.filters import QueryFilters, filter_conditions, where_sql
 from reportlens.retrieval.models import RetrievedChunk
 
 log = get_logger(__name__)
@@ -17,18 +17,12 @@ log = get_logger(__name__)
 QueryEmbedder = Callable[[str], np.ndarray]
 
 
-def search_sql(filters: QueryFilters | None = None) -> str:
-    """The search query, with a WHERE clause for any filters.
+def search_sql(where: str = "") -> str:
+    """The search query, optionally restricted by a WHERE clause.
 
     <=> is pgvector's cosine distance (0 = same direction, 2 = opposite), so 1 - distance is
     cosine similarity. Ordering by the bare distance expression lets Postgres use the HNSW index.
     """
-    conditions = []
-    if filters and filters.companies:
-        conditions.append("company = ANY(%(companies)s)")
-    if filters and filters.years:
-        conditions.append("year = ANY(%(years)s)")
-    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     return f"""
         SELECT chunk_id, company, year, section, pages, text, 1 - (embedding <=> %(q)s) AS score
         FROM chunks
@@ -39,14 +33,13 @@ def search_sql(filters: QueryFilters | None = None) -> str:
 
 
 def _run(conn: psycopg.Connection, vector: np.ndarray, k: int, filters: QueryFilters | None):
-    params = {"q": vector, "k": k}
-    if filters:
-        params |= {"companies": filters.companies, "years": filters.years}
+    conditions, params = filter_conditions(filters)
     with conn.transaction():
         # The HNSW index finds nearest neighbours first and filters after, so a strict WHERE
         # could leave fewer than k rows. Iterative scan keeps searching until k rows pass.
         conn.execute("SET LOCAL hnsw.iterative_scan = strict_order")
-        return conn.execute(search_sql(filters), params).fetchall()
+        sql = search_sql(where_sql(conditions))
+        return conn.execute(sql, {"q": vector, "k": k, **params}).fetchall()
 
 
 def vector_search(

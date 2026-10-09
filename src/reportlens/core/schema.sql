@@ -29,3 +29,9 @@ CREATE TABLE IF NOT EXISTS chunks (
 
 CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_company_year ON chunks (company, year);
+
+-- Phase 2 keyword search: Postgres full-text index over chunk text (stemmed, stopwords removed).
+-- A generated column fills itself for existing and new rows, so no re-ingest is needed.
+ALTER TABLE chunks
+    ADD COLUMN IF NOT EXISTS tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED;
+CREATE INDEX IF NOT EXISTS chunks_tsv_gin ON chunks USING gin (tsv);

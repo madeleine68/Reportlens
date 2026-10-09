@@ -97,3 +97,17 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** The fast LLM extracts `companies` and `years` as lists (comparisons and ranges need several values). The prompt lists the companies and years actually in the database plus common aliases, and code drops anything else. Filters become `WHERE company = ANY(...) AND year = ANY(...)`, with pgvector 0.8's `hnsw.iterative_scan = strict_order` so a strict filter still returns k rows from the HNSW index. If the filtered search returns nothing, it reruns unfiltered. Off by default (`RETRIEVAL_USE_FILTERS`), so the baseline stays reproducible. Section filtering is deferred to contextual chunking.
 
 **Eval evidence:** Recall@5 0.25 → 0.52, MRR 0.15 → 0.27, correctness 0.42 → 0.53, faithfulness 0.92 → 1.00. Wrong-year chunks 55% → 14%. 5 questions improved and 1 regressed (q020, Bell 2022 capex): the baseline had answered it from the 2023 report's prior-year comparison, which the year filter now excludes. Untested idea: also search report `year + 1`, which repeats the prior year's figures. Known gap: cost/query counts only the answer call, not the ~300-token filter call.
+
+## 2026-10-09 — Keyword search with Postgres full-text search
+
+**Context:** Many questions hinge on exact report terms ("CET1", "attributable to equity holders") that vector search blurs. Keyword search is also one of the two inputs to the hybrid RRF merge.
+
+**Options considered:**
+- Postgres full-text search (already in the stack) vs a BM25 library or extension (`rank_bm25`, ParadeDB `pg_search`).
+- `plainto_tsquery` / `websearch_to_tsquery` (every term must match) vs OR-ing the terms.
+
+**Decision:** Postgres FTS on a generated `tsvector` column with a GIN index (no re-ingest needed). The question's terms are stemmed and stopwords dropped by `plainto_tsquery`, then joined with OR so any term matches; `ts_rank_cd` ranks chunks with more terms, closer together, higher. It's BM25-like, not true BM25 (no corpus-wide IDF). Same company/year filters and fallback as vector search, via a shared `filter_conditions()`. `RETRIEVAL_MODE=vector|keyword` picks the retriever.
+
+**Eval evidence (retrieval only):** keyword + filters recall@5 0.84, MRR 0.61, vs vector + filters 0.52 / 0.27. Keyword found the right page on every question vector did, plus 10 more; 3 neither found. The two top-5 lists overlap 16% on average. The full run (answers) hit Groq's 200k tokens/day limit after 2 questions; that partial run was discarded, and the runner no longer writes a `results.md` row when any question errors.
+
+**Caveat:** 29 of the 31 questions were written by searching the parsed text for exact phrases, so they use the reports' own wording, which favours keyword search. Paraphrased questions are needed to judge vector search, and the hybrid merge, fairly.

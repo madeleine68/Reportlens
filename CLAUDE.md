@@ -85,6 +85,7 @@ uv run python scripts/ingest_all.py                  # parse, chunk, embed, load
 uv run python scripts/ask.py "What was RBC's net income in 2023?"   # ask one question
 uv run python evals/run_evals.py --name "baseline"   # run evals, append to results.md
 uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.jsonl  # runner smoke test
+uv run python evals/run_evals.py --name "x" --retrieval-only    # recall/MRR only, no answer model (cheap)
 uv run uvicorn reportlens.api.main:app --reload      # start API
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
@@ -117,7 +118,7 @@ Keep this section up to date when commands change.
 ### Phase 2: Better retrieval
 
 - [ ] Contextual chunking: section-aware splits plus a context prefix (company, year, section, one-line summary)
-- [ ] Keyword retriever (Postgres FTS)
+- [x] Keyword retriever (Postgres FTS)
 - [ ] Hybrid merge with RRF (**human writes this**, see below)
 - [ ] Cross-encoder reranking: top-50 → top-5
 - [x] Metadata filters: LLM extracts `{company, year, section}` into a Pydantic model and applies them as SQL `WHERE` clauses (company and year done; section deferred until contextual chunking, see DECISIONS.md)

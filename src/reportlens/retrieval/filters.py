@@ -66,3 +66,21 @@ def extract_filters(
     filters = QueryFilters(companies=companies, years=years)
     log.info("filters.extracted companies=%s years=%s", filters.companies, filters.years)
     return filters
+
+
+def filter_conditions(filters: QueryFilters | None) -> tuple[list[str], dict[str, list]]:
+    """SQL conditions (to be AND-ed into a WHERE clause) and their parameters for the filters."""
+    conditions: list[str] = []
+    params: dict[str, list] = {}
+    if filters and filters.companies:
+        conditions.append("company = ANY(%(companies)s)")
+        params["companies"] = filters.companies
+    if filters and filters.years:
+        conditions.append("year = ANY(%(years)s)")
+        params["years"] = filters.years
+    return conditions, params
+
+
+def where_sql(conditions: list[str]) -> str:
+    """'WHERE a AND b', or '' when there are no conditions."""
+    return f"WHERE {' AND '.join(conditions)}" if conditions else ""

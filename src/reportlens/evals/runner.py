@@ -11,10 +11,13 @@ from reportlens.core.logging import get_logger
 from reportlens.evals import judge, metrics
 from reportlens.evals.questions import EvalQuestion
 from reportlens.generation.answer import Answer, answer_question
+from reportlens.retrieval.models import RetrievedChunk
+from reportlens.retrieval.search import search
 
 log = get_logger(__name__)
 
 AnswerFn = Callable[[psycopg.Connection, str], Answer]
+RetrieveFn = Callable[[psycopg.Connection, str], list[RetrievedChunk]]
 
 
 class QuestionResult(BaseModel):
@@ -101,6 +104,22 @@ def evaluate_question(
         verdict = judge.judge_faithfulness(ans.text, ans.chunks, **judge_kwargs)
         result.faithfulness = judge.faithfulness_score(verdict)
         result.unsupported_claims = verdict.unsupported_claims
+    return result
+
+
+def evaluate_retrieval(
+    conn: psycopg.Connection, q: EvalQuestion, retrieve: RetrieveFn = search
+) -> QuestionResult:
+    """Score retrieval only (recall, MRR): no answer model and no judge, so it is cheap to run."""
+    result = QuestionResult(
+        id=q.id, type=q.type, question=q.question, expected_answer=q.expected_answer
+    )
+    start = time.perf_counter()
+    chunks = retrieve(conn, q.question)
+    result.latency_s = round(time.perf_counter() - start, 3)
+    result.retrieved = [f"{c.chunk_id} p{c.pages}" for c in chunks]
+    result.recall = metrics.recall_at_k(chunks, q.sources, get_settings().retrieval_top_k)
+    result.reciprocal_rank = metrics.reciprocal_rank(chunks, q.sources)
     return result
 
 

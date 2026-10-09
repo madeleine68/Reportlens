@@ -5,7 +5,13 @@ from pydantic import BaseModel
 
 from reportlens.evals.judge import CorrectnessVerdict, FaithfulnessVerdict
 from reportlens.evals.questions import EvalQuestion, ExpectedSource
-from reportlens.evals.runner import QuestionResult, evaluate_question, results_row, summarize
+from reportlens.evals.runner import (
+    QuestionResult,
+    evaluate_question,
+    evaluate_retrieval,
+    results_row,
+    summarize,
+)
 from reportlens.generation.answer import Answer, Citation
 from reportlens.generation.prompts import NOT_FOUND
 from reportlens.retrieval.models import RetrievedChunk
@@ -172,3 +178,12 @@ def test_results_row_matches_results_md_columns() -> None:
         "| n=1; vector top-5 |"
     )
     assert row.count("|") == 10  # 9 columns, like the results.md header
+
+
+def test_retrieval_only_scores_recall_without_answering_or_judging() -> None:
+    r = evaluate_retrieval(None, NUMERIC_Q, retrieve=lambda conn, q: [CHUNK])
+
+    assert (r.recall, r.reciprocal_rank) == (1.0, 1.0)
+    assert r.retrieved == ["rbc-2023-00007 p[12]"]
+    assert (r.answer, r.correctness, r.faithfulness) == (None, None, None)
+    assert summarize([r]).correctness is None  # shows as n/a in results.md

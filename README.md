@@ -25,7 +25,7 @@ uv run python scripts/ask.py "How many wireless subscribers did Bell have in 202
 |-------|--------------|--------|
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
-| 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | 🟡 In progress: metadata filters done |
+| 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | 🟡 In progress: metadata filters and keyword search done |
 | 3. Structured data | Real tables, SQL tool, knowledge graph | ⬜ Planned |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
 | 5. Ship | API, UI, deployment | ⬜ Planned |
@@ -39,7 +39,10 @@ Every technique is measured on the same 31-question eval set (`evals/questions.j
 | Experiment | Recall@5 | MRR | Correctness | Faithfulness |
 |------------|----------|-----|-------------|--------------|
 | Phase 1 baseline: naive chunks, vector top-5 | 0.25 | 0.15 | 0.42 | 0.92 |
-| + metadata filters (company, year) | **0.52** | **0.27** | **0.53** | **1.00** |
+| + metadata filters (company, year) | 0.52 | 0.27 | **0.53** | **1.00** |
+| Keyword search + filters *(retrieval only, see note)* | **0.84** | **0.61** | n/a | n/a |
+
+*Retrieval-only rows score search without generating answers. The keyword row's full run hit the LLM provider's daily token limit, so answers will be scored in a re-run. Also note that most eval questions use the reports' own wording, which favours keyword search.*
 
 What the baseline shows, and which phase targets each problem:
 
@@ -139,13 +142,13 @@ flowchart LR
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
-    class q,filt,vec,gen done
-    class kw,rrf,rerank,ctx planned
+    class q,filt,vec,kw,gen done
+    class rrf,rerank,ctx planned
 ```
 
 - **Contextual chunking:** chunks follow section boundaries and start with a short label (company, year, section), so a chunk still makes sense on its own.
 - **Metadata filter** (`retrieval/filters.py`): the fast LLM reads which companies and fiscal years the question names, so "RBC's 2023 net income" only searches RBC's 2023 report. It knows nicknames like Bell → BCE and expands ranges like "2022 to 2024". Values are checked against the database, and if a filter matches nothing, the search runs unfiltered, so a bad filter is never worse than none. Turn it on with `RETRIEVAL_USE_FILTERS=true`. Section filtering waits for contextual chunking, which will give chunks clean section labels.
-- **Keyword search:** catches exact terms that vector search can miss, like "CET1" or a specific number.
+- **Keyword search** (`retrieval/keyword.py`): Postgres full-text search finds chunks containing the question's words, after stemming ("incomes" → "incom") and dropping common words like "what". Any word can match, and chunks with more matching words close together rank higher. It catches exact terms that vector search blurs, like "CET1" or "attributable to equity holders". Ranking uses `ts_rank_cd`, which is BM25-like but **not true BM25**: it doesn't weight rare words above common ones across the whole collection. Use it with `RETRIEVAL_MODE=keyword`.
 - **Hybrid merge (RRF):** combines the keyword and vector rankings into one list.
 - **Rerank:** a slower, more accurate model reorders the top 50 candidates and keeps the best 5.
 

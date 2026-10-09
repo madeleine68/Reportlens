@@ -26,14 +26,25 @@ RETRIEVED = [
     _chunk("td", 2023, [12]),
     _chunk("rbc", 2023, [12, 13]),
 ]
-NET_INCOME_P12 = ExpectedSource(company="RBC", year=2023, page=12)
-CAPITAL_P41 = ExpectedSource(company="RBC", year=2023, page=41)
+NET_INCOME_P12 = ExpectedSource(company="RBC", year=2023, pages=[12])
+CAPITAL_P41 = ExpectedSource(company="RBC", year=2023, pages=[41])
 
 
 def test_chunk_match_needs_company_year_and_page() -> None:
     assert metrics.chunk_matches(RETRIEVED[3], NET_INCOME_P12)  # company match is case-insensitive
     assert not metrics.chunk_matches(RETRIEVED[0], NET_INCOME_P12)
     assert not metrics.chunk_matches(RETRIEVED[2], NET_INCOME_P12)
+
+
+def test_any_listed_page_satisfies_a_source() -> None:
+    either_page = ExpectedSource(company="rbc", year=2023, pages=[99, 41])
+    assert metrics.chunk_matches(RETRIEVED[1], either_page)
+    assert metrics.recall_at_k(RETRIEVED, [either_page], k=2) == 1.0
+
+
+def test_single_page_shorthand_is_accepted() -> None:
+    source = ExpectedSource.model_validate({"company": "rbc", "year": 2023, "page": 12})
+    assert source.pages == [12]
 
 
 def test_recall_counts_sources_found_in_top_k() -> None:
@@ -47,7 +58,8 @@ def test_reciprocal_rank_uses_first_matching_chunk() -> None:
     assert metrics.reciprocal_rank(RETRIEVED, [NET_INCOME_P12]) == 0.25
     assert metrics.reciprocal_rank(RETRIEVED, [NET_INCOME_P12, CAPITAL_P41]) == 0.5
     assert (
-        metrics.reciprocal_rank(RETRIEVED, [ExpectedSource(company="bce", year=2023, page=1)]) == 0
+        metrics.reciprocal_rank(RETRIEVED, [ExpectedSource(company="bce", year=2023, pages=[1])])
+        == 0
     )
 
 

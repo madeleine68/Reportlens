@@ -24,7 +24,7 @@ NUMERIC_Q = EvalQuestion(
     question="What was RBC's net income in 2023?",
     type="numeric",
     expected_answer="$16.2 billion",
-    sources=[ExpectedSource(company="RBC", year=2023, page=12)],
+    sources=[ExpectedSource(company="RBC", year=2023, pages=[12])],
 )
 OUT_OF_CORPUS_Q = EvalQuestion(
     id="q2", question="Who won the 2023 Stanley Cup?", type="out_of_corpus", expected_answer=""

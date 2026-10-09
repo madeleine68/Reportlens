@@ -7,11 +7,11 @@ from reportlens.retrieval.models import RetrievedChunk
 
 
 def chunk_matches(chunk: RetrievedChunk, source: ExpectedSource) -> bool:
-    """A chunk covers a source if it is from the same report and spans the expected page."""
+    """A chunk covers a source if it is from the same report and spans any of its pages."""
     return (
         chunk.company.lower() == source.company.lower()
         and chunk.year == source.year
-        and source.page in chunk.pages
+        and not set(source.pages).isdisjoint(chunk.pages)
     )
 
 

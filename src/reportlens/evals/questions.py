@@ -3,17 +3,30 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 QuestionType = Literal["lookup", "numeric", "comparison", "trend", "relationship", "out_of_corpus"]
 
 
 class ExpectedSource(BaseModel):
-    """A page where the answer can be found."""
+    """One piece of evidence the answer needs, and every PDF page where it appears.
+
+    Retrieving any one of `pages` counts as finding this source. Pages are PDF page numbers
+    (1 = first page of the file), not the numbers printed on the page.
+    """
 
     company: str
     year: int
-    page: int
+    pages: list[int]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_single_page(cls, data: object) -> object:
+        """Allow the shorthand {"page": 12} for {"pages": [12]}."""
+        if isinstance(data, dict) and "page" in data and "pages" not in data:
+            data = {**data, "pages": [data["page"]]}
+            del data["page"]
+        return data
 
 
 class EvalQuestion(BaseModel):

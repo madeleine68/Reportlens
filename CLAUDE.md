@@ -198,8 +198,12 @@ These are the parts I will write myself so I can explain them in interviews. You
 `evals/questions.jsonl`, one JSON object per line:
 
 ```json
-{"id": "q001", "question": "What was RBC's net income in fiscal 2023?", "type": "numeric", "expected_answer": "...", "sources": [{"company": "RBC", "year": 2023, "page": 12}], "notes": ""}
+{"id": "q001", "question": "What was RBC's net income in fiscal 2023?", "type": "numeric", "expected_answer": "$14,866 million", "sources": [{"company": "rbc", "year": 2023, "pages": [26, 122, 141]}], "notes": ""}
 ```
+
+- Each entry in `sources` is one piece of evidence the answer needs. List **every** page where that evidence appears; retrieving any one of them counts. `"page": 12` is accepted as shorthand for `"pages": [12]`.
+- Pages are **PDF page numbers** (1 = first page of the file), not the numbers printed on the page. They differ in some reports: in the Scotiabank and BCE reports, PDF page = printed page + 2.
+- Lines starting with `//` are comments.
 
 `type` is one of: `lookup`, `numeric`, `comparison`, `trend`, `relationship`, `out_of_corpus`.
 

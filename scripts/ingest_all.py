@@ -1,6 +1,6 @@
 """Ingest every PDF under data/raw/{company}/{year}.pdf.
 
-Phase 1 so far: parse only (chunk, embed and load are added in later tasks).
+Phase 1 so far: parse and chunk (embed and load are added in later tasks).
 Usage: uv run python scripts/ingest_all.py
 """
 
@@ -9,6 +9,7 @@ import time
 
 from reportlens.core.config import get_settings
 from reportlens.core.logging import setup_logging
+from reportlens.ingest.chunking import chunk_document
 from reportlens.ingest.parse import parse_cached
 
 
@@ -26,16 +27,19 @@ def main() -> int:
         start = time.perf_counter()
         try:
             doc = parse_cached(pdf)
+            chunks = chunk_document(doc)
         except Exception as err:  # keep going so one bad PDF doesn't stop the batch
             failures += 1
-            print(f"FAILED {pdf.relative_to(settings.raw_dir)}: {err}")
+            print(f"FAILED {pdf.relative_to(settings.raw_dir)}: {err}", flush=True)
             continue
         print(
             f"{doc.company}/{doc.year}: {doc.num_pages} pages, {len(doc.blocks)} blocks, "
-            f"{time.perf_counter() - start:.1f}s"
+            f"{len(chunks)} chunks, "
+            f"{time.perf_counter() - start:.1f}s",
+            flush=True,  # show progress live; a long batch may be killed partway through
         )
 
-    print(f"Done: {len(pdfs) - failures}/{len(pdfs)} parsed")
+    print(f"Done: {len(pdfs) - failures}/{len(pdfs)} ingested")
     return 1 if failures else 0
 
 

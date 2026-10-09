@@ -27,3 +27,15 @@ class ParsedDocument(BaseModel):
     extract_version: str  # block extraction logic used; see parse.EXTRACT_VERSION
     num_pages: int
     blocks: list[ParsedBlock]
+
+
+class Chunk(BaseModel):
+    """A retrievable piece of a report: the unit we embed, search and cite."""
+
+    chunk_id: str  # e.g. "rbc-2023-00042"
+    company: str
+    year: int
+    text: str
+    pages: list[int]  # every page the chunk's text comes from, ascending
+    section: str | None  # section of the block the chunk starts in
+    num_tokens: int

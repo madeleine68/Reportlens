@@ -104,7 +104,7 @@ Keep this section up to date when commands change.
 ### Phase 1: Baseline RAG + evals
 
 - [x] Parse PDFs with Docling, keeping page numbers (light mode; see DECISIONS.md)
-- [ ] Naive chunking (~500 tokens, small overlap)
+- [x] Naive chunking (450 tokens, 50 overlap; see DECISIONS.md)
 - [ ] Embed and store in pgvector with metadata (company, year, page, section)
 - [ ] Retrieve top-5 by vector similarity, answer with page citations
 - [ ] Eval runner: recall@5, MRR, answer correctness (LLM judge), faithfulness, latency, cost

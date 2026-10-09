@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     llm_model_main: str
     llm_model_fast: str
 
+    # Embeddings and chunking. bge-small reads at most 512 tokens, so chunks stay well under
+    # that to leave room for the Phase 2 context prefix.
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
+    chunk_tokens: int = 450
+    chunk_overlap: int = 50
+
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"
 

@@ -82,7 +82,8 @@ docker compose up -d                                 # start postgres (+ neo4j l
 uv run python scripts/ingest_all.py                  # parse, chunk, embed, load
 uv run python evals/run_evals.py --name "baseline"   # run evals, append to results.md
 uv run uvicorn reportlens.api.main:app --reload      # start API
-uv run pytest                                        # tests
+uv run pytest                                        # fast tests
+uv run pytest -m slow                                # tests that run real models
 uv run ruff check . && uv run ruff format .          # lint and format
 ```
 
@@ -102,7 +103,7 @@ Keep this section up to date when commands change.
 
 ### Phase 1: Baseline RAG + evals
 
-- [ ] Parse PDFs with Docling, keeping page numbers
+- [x] Parse PDFs with Docling, keeping page numbers (light mode; see DECISIONS.md)
 - [ ] Naive chunking (~500 tokens, small overlap)
 - [ ] Embed and store in pgvector with metadata (company, year, page, section)
 - [ ] Retrieve top-5 by vector similarity, answer with page citations

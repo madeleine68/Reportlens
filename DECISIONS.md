@@ -111,3 +111,11 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Eval evidence (retrieval only):** keyword + filters recall@5 0.84, MRR 0.61, vs vector + filters 0.52 / 0.27. Keyword found the right page on every question vector did, plus 10 more; 3 neither found. The two top-5 lists overlap 16% on average. The full run (answers) hit Groq's 200k tokens/day limit after 2 questions; that partial run was discarded, and the runner no longer writes a `results.md` row when any question errors.
 
 **Caveat:** 29 of the 31 questions were written by searching the parsed text for exact phrases, so they use the reports' own wording, which favours keyword search. Paraphrased questions are needed to judge vector search, and the hybrid merge, fairly.
+
+## 2026-10-09 — Paraphrased questions to test wording bias
+
+**Context:** Keyword search scored recall@5 0.84 vs vector's 0.52, but most questions reused the reports' own terms (they were written by searching the text for exact phrases), which favours keyword search.
+
+**Decision:** Added 11 paraphrases (q033–q043) of existing questions: same facts, same verified pages, everyday wording that avoids the report's terms ("profit" for net income, "cellphone customers" for mobile phone subscribers, "core capital cushion" for CET1). Same-fact pairs isolate the effect of wording. The set grew from 31 to 42 questions, so all three retrievers were re-run (retrieval only, no answer-model tokens) for like-for-like rows marked `(n=42)`; earlier rows remain valid for n=31 only.
+
+**Eval evidence (retrieval only, recall@5 on the 11 paired facts):** keyword + filters 0.95 with the report's wording → 0.32 with everyday wording; vector + filters 0.50 → 0.55. On all 42: keyword + filters 0.69, vector + filters 0.50, vector 0.31. Together the two top-5 lists cover 34 of 39 answerable questions, vs 29 for keyword alone, which is the case for a hybrid merge.

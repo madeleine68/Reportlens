@@ -40,9 +40,18 @@ Every technique is measured on the same 31-question eval set (`evals/questions.j
 |------------|----------|-----|-------------|--------------|
 | Phase 1 baseline: naive chunks, vector top-5 | 0.25 | 0.15 | 0.42 | 0.92 |
 | + metadata filters (company, year) | 0.52 | 0.27 | **0.53** | **1.00** |
-| Keyword search + filters *(retrieval only, see note)* | **0.84** | **0.61** | n/a | n/a |
+| Keyword search + filters *(retrieval only)* | **0.84** | **0.61** | n/a | n/a |
 
-*Retrieval-only rows score search without generating answers. The keyword row's full run hit the LLM provider's daily token limit, so answers will be scored in a re-run. Also note that most eval questions use the reports' own wording, which favours keyword search.*
+*Retrieval-only rows score search without generating answers. The keyword row's full run hit the LLM provider's daily token limit, so answers will be scored in a re-run.*
+
+**Does the wording of the question matter?** Most eval questions borrowed the reports' own terms, which favours keyword search. So 11 questions were rephrased in everyday words (same facts, same pages), e.g. *"How many cellphone customers did Bell have?"* instead of *"How many mobile phone subscribers…"*. Retrieval recall@5 on those 11 facts:
+
+| Retriever | Report's wording | Everyday wording |
+|-----------|------------------|------------------|
+| Vector + filters | 0.50 | 0.55 |
+| Keyword + filters | **0.95** | 0.32 |
+
+Keyword search wins when the question uses the report's exact terms and collapses when it doesn't. Vector search is steady either way. On all 42 questions, the two find different correct pages: together their top-5 lists cover 34 of 39 answerable questions, against 29 for keyword alone. That gap is what the **hybrid merge (RRF)** is meant to capture.
 
 What the baseline shows, and which phase targets each problem:
 

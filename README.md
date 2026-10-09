@@ -25,7 +25,7 @@ uv run python scripts/ask.py "How many wireless subscribers did Bell have in 202
 |-------|--------------|--------|
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
-| 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ⬜ Planned |
+| 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | 🟡 In progress: metadata filters done |
 | 3. Structured data | Real tables, SQL tool, knowledge graph | ⬜ Planned |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
 | 5. Ship | API, UI, deployment | ⬜ Planned |
@@ -39,11 +39,12 @@ Every technique is measured on the same 31-question eval set (`evals/questions.j
 | Experiment | Recall@5 | MRR | Correctness | Faithfulness |
 |------------|----------|-----|-------------|--------------|
 | Phase 1 baseline: naive chunks, vector top-5 | 0.25 | 0.15 | 0.42 | 0.92 |
+| + metadata filters (company, year) | **0.52** | **0.27** | **0.53** | **1.00** |
 
 What the baseline shows, and which phase targets each problem:
 
 - **Retrieval is the bottleneck.** In 14 of 28 answerable questions, the right pages weren't retrieved and the model refused. The model rarely makes things up (faithfulness 0.92), so better retrieval should turn straight into better answers.
-- **The wrong year is retrieved.** 55% of retrieved chunks come from a different fiscal year than the question asks about, because similar reports from different years look alike to vector search. *Phase 2 metadata filters.*
+- **The wrong year is retrieved.** 55% of retrieved chunks came from a different fiscal year than the question asks about, because similar reports from different years look alike to vector search. *Phase 2 metadata filters: now 14%, and recall doubled.*
 - **Numbers lose their labels.** Without the table model, a figure can end up far from its row label, so the model may pick the wrong row (q001 reported the *adjusted* figure). *Phase 3 tables.*
 - **Multi-report questions fail.** Comparison questions score 0: one top-5 search can't cover two reports at once. *Phase 4 agentic layer.*
 - **Out-of-corpus questions are handled.** All 3 were correctly refused.
@@ -121,13 +122,13 @@ flowchart TD
 7. **Generate** (`generation/answer.py`): the LLM gets the 5 chunks as numbered sources and must answer from them only, putting a marker like `[2]` after each claim. The code turns those markers into citations (company, year, pages) and drops any that point to a source that doesn't exist. If the sources don't contain the answer, the LLM replies with a fixed "couldn't find this" sentence instead of guessing.
 8. **Evaluate** (`evals/run_evals.py`): every question in a fixed set is answered and scored. Recall@5 and MRR check, without any LLM, whether retrieval found the expected pages. An LLM judge grades correctness against the expected answer, and checks faithfulness (is every claim backed by the retrieved chunks?). Latency and cost are recorded too. Each run's details are saved in `evals/runs/`, and a summary row goes into `evals/results.md`, so every later change can be compared against this baseline.
 
-### Phase 2: Better retrieval ⬜
+### Phase 2: Better retrieval 🟡
 
 Improves step 6 above. Each technique is added one at a time, with an eval run after each, so its effect can be measured on its own.
 
 ```mermaid
 flowchart LR
-    q["Question"] --> filt["Metadata filter<br/>LLM extracts company, year,<br/>section from the question"]
+    q["Question"] --> filt["Metadata filter<br/>fast LLM extracts companies<br/>and years from the question"]
     filt --> vec["Vector search<br/>similar meaning"]
     filt --> kw["Keyword search<br/>Postgres full-text:<br/>exact words and numbers"]
     vec --> rrf["Hybrid merge (RRF)<br/>combine both ranked lists"]
@@ -137,11 +138,13 @@ flowchart LR
     ctx["Contextual chunking<br/>split by section, add a<br/>company / year / section prefix"] -.->|"better chunks in the database"| vec
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
-    class q,filt,vec,kw,rrf,rerank,gen,ctx planned
+    classDef done fill:#d4edda,stroke:#28a745,color:#155724
+    class q,filt,vec,gen done
+    class kw,rrf,rerank,ctx planned
 ```
 
 - **Contextual chunking:** chunks follow section boundaries and start with a short label (company, year, section), so a chunk still makes sense on its own.
-- **Metadata filter:** "RBC's 2023 net income" only searches RBC 2023 chunks.
+- **Metadata filter** (`retrieval/filters.py`): the fast LLM reads which companies and fiscal years the question names, so "RBC's 2023 net income" only searches RBC's 2023 report. It knows nicknames like Bell → BCE and expands ranges like "2022 to 2024". Values are checked against the database, and if a filter matches nothing, the search runs unfiltered, so a bad filter is never worse than none. Turn it on with `RETRIEVAL_USE_FILTERS=true`. Section filtering waits for contextual chunking, which will give chunks clean section labels.
 - **Keyword search:** catches exact terms that vector search can miss, like "CET1" or a specific number.
 - **Hybrid merge (RRF):** combines the keyword and vector rankings into one list.
 - **Rerank:** a slower, more accurate model reorders the top 50 candidates and keeps the best 5.

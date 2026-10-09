@@ -44,6 +44,8 @@ class Settings(BaseSettings):
 
     # Retrieval
     retrieval_top_k: int = 5
+    # Phase 2: LLM-extracted company/year filters (off = Phase 1 baseline behaviour).
+    retrieval_use_filters: bool = False
 
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"

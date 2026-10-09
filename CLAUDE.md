@@ -120,7 +120,7 @@ Keep this section up to date when commands change.
 - [ ] Keyword retriever (Postgres FTS)
 - [ ] Hybrid merge with RRF (**human writes this**, see below)
 - [ ] Cross-encoder reranking: top-50 → top-5
-- [ ] Metadata filters: LLM extracts `{company, year, section}` into a Pydantic model and applies them as SQL `WHERE` clauses
+- [x] Metadata filters: LLM extracts `{company, year, section}` into a Pydantic model and applies them as SQL `WHERE` clauses (company and year done; section deferred until contextual chunking, see DECISIONS.md)
 - [ ] Eval run after each technique, one row each in `results.md`
 
 ### Phase 3: Structured data

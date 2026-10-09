@@ -10,7 +10,7 @@ from reportlens.core import llm
 from reportlens.core.logging import get_logger
 from reportlens.generation import prompts
 from reportlens.retrieval.models import RetrievedChunk
-from reportlens.retrieval.vector import vector_search
+from reportlens.retrieval.search import search
 
 log = get_logger(__name__)
 
@@ -112,7 +112,7 @@ def is_not_found(text: str) -> bool:
 def answer_question(
     conn: psycopg.Connection,
     question: str,
-    retrieve: Retriever = vector_search,
+    retrieve: Retriever = search,
     chat: Chat = llm.chat,
 ) -> Answer:
     """Retrieve chunks, ask the main LLM to answer from them, and attach citations."""

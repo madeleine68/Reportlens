@@ -84,3 +84,16 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 - Recall needs every page that contains the answer: s03's answer came from a highlights page that wasn't listed as a source, so it scored recall 0 with a correct answer.
 
 **Eval evidence:** Smoke set (6 questions, not the eval set): recall@5 0.20, MRR 0.20, correctness 0.50, faithfulness 1.00. The run also caught a citation format (`[3†L13-L16]`) the parser missed, now fixed.
+
+## 2026-10-09 — Metadata filters: company and year only, with fallback
+
+**Context:** The baseline's biggest failure: 55% of retrieved chunks came from a different fiscal year than the question named, because reports from different years read alike to vector search.
+
+**Options considered:**
+- Regex/keyword extraction of company and year: no LLM call, but misses nicknames ("Bell"), ranges ("2022 to 2024") and phrasing like "the previous year".
+- LLM extraction into a Pydantic model (the plan in `CLAUDE.md`).
+- Filtering on section too: the plan includes it, but chunks carry 2,074 distinct raw headings ("Table 18", "BCE NET ACTIVATIONS (LOSSES)") the LLM has no way to know, so a section filter would mostly match nothing.
+
+**Decision:** The fast LLM extracts `companies` and `years` as lists (comparisons and ranges need several values). The prompt lists the companies and years actually in the database plus common aliases, and code drops anything else. Filters become `WHERE company = ANY(...) AND year = ANY(...)`, with pgvector 0.8's `hnsw.iterative_scan = strict_order` so a strict filter still returns k rows from the HNSW index. If the filtered search returns nothing, it reruns unfiltered. Off by default (`RETRIEVAL_USE_FILTERS`), so the baseline stays reproducible. Section filtering is deferred to contextual chunking.
+
+**Eval evidence:** Recall@5 0.25 → 0.52, MRR 0.15 → 0.27, correctness 0.42 → 0.53, faithfulness 0.92 → 1.00. Wrong-year chunks 55% → 14%. 5 questions improved and 1 regressed (q020, Bell 2022 capex): the baseline had answered it from the 2023 report's prior-year comparison, which the year filter now excludes. Untested idea: also search report `year + 1`, which repeats the prior year's figures. Known gap: cost/query counts only the answer call, not the ~300-token filter call.

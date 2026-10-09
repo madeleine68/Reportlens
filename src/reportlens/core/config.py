@@ -47,8 +47,11 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 5
     # Phase 2: LLM-extracted company/year filters (off = Phase 1 baseline behaviour).
     retrieval_use_filters: bool = False
-    # Which retriever answers use: "vector" (Phase 1) or "keyword" (Postgres full-text).
-    retrieval_mode: Literal["vector", "keyword"] = "vector"
+    # Which retriever answers use: "vector" (Phase 1), "keyword" (Postgres full-text), or
+    # "hybrid" (both, fused with Reciprocal Rank Fusion).
+    retrieval_mode: Literal["vector", "keyword", "hybrid"] = "vector"
+    hybrid_candidates: int = 20  # results taken from each retriever before fusing
+    rrf_k: int = 60  # RRF damping constant; 60 is the value from the original paper
 
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"

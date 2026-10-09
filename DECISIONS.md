@@ -119,3 +119,15 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** Added 11 paraphrases (q033–q043) of existing questions: same facts, same verified pages, everyday wording that avoids the report's terms ("profit" for net income, "cellphone customers" for mobile phone subscribers, "core capital cushion" for CET1). Same-fact pairs isolate the effect of wording. The set grew from 31 to 42 questions, so all three retrievers were re-run (retrieval only, no answer-model tokens) for like-for-like rows marked `(n=42)`; earlier rows remain valid for n=31 only.
 
 **Eval evidence (retrieval only, recall@5 on the 11 paired facts):** keyword + filters 0.95 with the report's wording → 0.32 with everyday wording; vector + filters 0.50 → 0.55. On all 42: keyword + filters 0.69, vector + filters 0.50, vector 0.31. Together the two top-5 lists cover 34 of 39 answerable questions, vs 29 for keyword alone, which is the case for a hybrid merge.
+
+## 2026-10-09 — Hybrid search with Reciprocal Rank Fusion
+
+**Context:** Vector and keyword search find different correct pages (their top-5 lists cover 34 of 39 answerable questions together, vs 29 for keyword alone), so merging them should help.
+
+**Options considered:**
+- Weighted sum of normalized scores: needs score normalization, since cosine (0–1) and `ts_rank_cd` (unbounded) aren't comparable, and the weights need tuning.
+- Reciprocal Rank Fusion: uses ranks only, with one standard constant (k=60). No tuning needed.
+
+**Decision:** RRF over the top 20 of each retriever (`HYBRID_CANDIDATES`), keeping the top 5; `RRF_K=60`. Both retrievers share the same LLM-extracted filters. Written by Claude at the owner's explicit request (`CLAUDE.md` had reserved it for the owner).
+
+**Eval evidence (retrieval only, n=42):** recall@5 0.62, MRR 0.45, vs keyword + filters 0.69 / 0.48 and vector + filters 0.50 / 0.28. More balanced by wording (0.68 report wording / 0.50 everyday, vs keyword's 0.95 / 0.32), but lower overall: when one retriever is clearly right, chunks both rank moderately can outvote it. Sensitivity: depth 5/10/20 × k 10/60 gave 0.62–0.65, so it isn't a tuning problem, and the defaults were kept rather than tuned to 42 questions. The right page is in the combined top-20 candidates for 39/39 answerable questions, so the next step is a reranker over those candidates, not a different merge.

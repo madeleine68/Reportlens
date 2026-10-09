@@ -25,7 +25,7 @@ uv run python scripts/ask.py "How many wireless subscribers did Bell have in 202
 |-------|--------------|--------|
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
-| 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | 🟡 In progress: metadata filters and keyword search done |
+| 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | 🟡 In progress: metadata filters, keyword and hybrid search done; reranking next |
 | 3. Structured data | Real tables, SQL tool, knowledge graph | ⬜ Planned |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
 | 5. Ship | API, UI, deployment | ⬜ Planned |
@@ -52,6 +52,8 @@ Every technique is measured on the same 31-question eval set (`evals/questions.j
 | Keyword + filters | **0.95** | 0.32 |
 
 Keyword search wins when the question uses the report's exact terms and collapses when it doesn't. Vector search is steady either way. On all 42 questions, the two find different correct pages: together their top-5 lists cover 34 of 39 answerable questions, against 29 for keyword alone. That gap is what the **hybrid merge (RRF)** is meant to capture.
+
+**Hybrid search result:** recall@5 **0.62** (MRR 0.45), more balanced across wordings (0.68 report wording, 0.50 everyday wording) but *below* keyword alone overall. RRF rewards chunks that both retrievers rank fairly well, so a so-so chunk ranked about 6th by both can push out the right page that keyword search ranked 1st. Tuning RRF changed little (0.62–0.65). Yet the right page is somewhere in the combined top-20 candidates for **all 39** answerable questions: the candidates are fine, the ordering isn't. That's the job of the next step, **reranking**.
 
 What the baseline shows, and which phase targets each problem:
 
@@ -151,14 +153,14 @@ flowchart LR
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
-    class q,filt,vec,kw,gen done
-    class rrf,rerank,ctx planned
+    class q,filt,vec,kw,rrf,gen done
+    class rerank,ctx planned
 ```
 
 - **Contextual chunking:** chunks follow section boundaries and start with a short label (company, year, section), so a chunk still makes sense on its own.
 - **Metadata filter** (`retrieval/filters.py`): the fast LLM reads which companies and fiscal years the question names, so "RBC's 2023 net income" only searches RBC's 2023 report. It knows nicknames like Bell → BCE and expands ranges like "2022 to 2024". Values are checked against the database, and if a filter matches nothing, the search runs unfiltered, so a bad filter is never worse than none. Turn it on with `RETRIEVAL_USE_FILTERS=true`. Section filtering waits for contextual chunking, which will give chunks clean section labels.
 - **Keyword search** (`retrieval/keyword.py`): Postgres full-text search finds chunks containing the question's words, after stemming ("incomes" → "incom") and dropping common words like "what". Any word can match, and chunks with more matching words close together rank higher. It catches exact terms that vector search blurs, like "CET1" or "attributable to equity holders". Ranking uses `ts_rank_cd`, which is BM25-like but **not true BM25**: it doesn't weight rare words above common ones across the whole collection. Use it with `RETRIEVAL_MODE=keyword`.
-- **Hybrid merge (RRF):** combines the keyword and vector rankings into one list.
+- **Hybrid merge (RRF)** (`retrieval/hybrid.py`): takes the top 20 from vector search and the top 20 from keyword search, and scores each chunk by adding `1 / (60 + rank)` for every list it appears in. Only the ranks count, not the raw scores, which are on different scales. Chunks both retrievers like rise to the top. Use it with `RETRIEVAL_MODE=hybrid`.
 - **Rerank:** a slower, more accurate model reorders the top 50 candidates and keeps the best 5.
 
 ### Phase 3: Structured data ⬜

@@ -119,7 +119,7 @@ Keep this section up to date when commands change.
 
 - [ ] Contextual chunking: section-aware splits plus a context prefix (company, year, section, one-line summary)
 - [x] Keyword retriever (Postgres FTS)
-- [ ] Hybrid merge with RRF (**human writes this**, see below)
+- [x] Hybrid merge with RRF (written by Claude at the owner's explicit request, 2026-10-09)
 - [ ] Cross-encoder reranking: top-50 → top-5
 - [x] Metadata filters: LLM extracts `{company, year, section}` into a Pydantic model and applies them as SQL `WHERE` clauses (company and year done; section deferred until contextual chunking, see DECISIONS.md)
 - [ ] Eval run after each technique, one row each in `results.md`
@@ -174,7 +174,7 @@ Keep this section up to date when commands change.
 These are the parts I will write myself so I can explain them in interviews. You may review them, suggest fixes or write tests for them.
 
 - `evals/questions.jsonl`: never add, edit or delete questions
-- The RRF merge function in `retrieval/hybrid.py`
+- The RRF merge function in `retrieval/hybrid.py` (owner asked Claude to write it on 2026-10-09; owner to review and be able to explain it)
 - The router logic in `agents/router.py`
 
 ### Code conventions

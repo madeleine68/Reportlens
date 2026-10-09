@@ -4,6 +4,7 @@ import psycopg
 
 from reportlens.core.config import get_settings
 from reportlens.retrieval.filters import extract_filters, known_values
+from reportlens.retrieval.hybrid import hybrid_search
 from reportlens.retrieval.keyword import keyword_search
 from reportlens.retrieval.models import RetrievedChunk
 from reportlens.retrieval.vector import vector_search
@@ -12,7 +13,7 @@ from reportlens.retrieval.vector import vector_search
 def search(conn: psycopg.Connection, question: str) -> list[RetrievedChunk]:
     """Retrieve chunks for a question.
 
-    RETRIEVAL_MODE picks the retriever (vector or keyword); RETRIEVAL_USE_FILTERS adds
+    RETRIEVAL_MODE picks the retriever (vector, keyword or hybrid); RETRIEVAL_USE_FILTERS adds
     LLM-extracted company/year filters to either.
     """
     settings = get_settings()
@@ -21,4 +22,6 @@ def search(conn: psycopg.Connection, question: str) -> list[RetrievedChunk]:
         filters = extract_filters(question, known_values(conn))
     if settings.retrieval_mode == "keyword":
         return keyword_search(conn, question, filters=filters)
+    if settings.retrieval_mode == "hybrid":
+        return hybrid_search(conn, question, filters=filters)
     return vector_search(conn, question, filters=filters)

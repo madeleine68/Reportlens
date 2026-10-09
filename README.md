@@ -24,13 +24,29 @@ uv run python scripts/ask.py "How many wireless subscribers did Bell have in 202
 | Phase | What it adds | Status |
 |-------|--------------|--------|
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
-| 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | 🟡 In progress: full pipeline and eval runner built; waiting on the eval questions for the baseline |
+| 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ⬜ Planned |
 | 3. Structured data | Real tables, SQL tool, knowledge graph | ⬜ Planned |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
 | 5. Ship | API, UI, deployment | ⬜ Planned |
 
 **Corpus so far:** 12 of 20 reports ingested (BCE, RBC and Scotiabank, fiscal 2021–2024). TD and Shopify are downloaded but not yet ingested.
+
+## Results so far
+
+Every technique is measured on the same 31-question eval set (`evals/questions.jsonl`). Full history: [`evals/results.md`](evals/results.md).
+
+| Experiment | Recall@5 | MRR | Correctness | Faithfulness |
+|------------|----------|-----|-------------|--------------|
+| Phase 1 baseline: naive chunks, vector top-5 | 0.25 | 0.15 | 0.42 | 0.92 |
+
+What the baseline shows, and which phase targets each problem:
+
+- **Retrieval is the bottleneck.** In 14 of 28 answerable questions, the right pages weren't retrieved and the model refused. The model rarely makes things up (faithfulness 0.92), so better retrieval should turn straight into better answers.
+- **The wrong year is retrieved.** 55% of retrieved chunks come from a different fiscal year than the question asks about, because similar reports from different years look alike to vector search. *Phase 2 metadata filters.*
+- **Numbers lose their labels.** Without the table model, a figure can end up far from its row label, so the model may pick the wrong row (q001 reported the *adjusted* figure). *Phase 3 tables.*
+- **Multi-report questions fail.** Comparison questions score 0: one top-5 search can't cover two reports at once. *Phase 4 agentic layer.*
+- **Out-of-corpus questions are handled.** All 3 were correctly refused.
 
 ## How it works, phase by phase
 
@@ -63,7 +79,7 @@ flowchart LR
 4. **`core/db.py`** connects to Postgres and creates the tables if they don't exist yet.
 5. **Postgres with pgvector** stores text and vectors (lists of numbers that capture meaning) side by side.
 
-### Phase 1: Baseline RAG + evals 🟡
+### Phase 1: Baseline RAG + evals ✅
 
 The simplest complete RAG system, used as the baseline every later technique is measured against. It has two halves: **ingestion** (done once per report) and **answering** (done for every question).
 
@@ -93,8 +109,7 @@ flowchart TD
 
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
-    class pdf,parse,cache,chunk,embed,store,q,qembed,search,gen,out,run done
-    class qs,results planned
+    class pdf,parse,cache,chunk,embed,store,q,qembed,search,gen,out,qs,run,results done
 ```
 
 1. **Parse** (`ingest/parse.py`): Docling reads the PDF's layout and returns blocks of text, each tagged with its page number and the heading it sits under. Page headers and footers are dropped. The result is cached, so each PDF is parsed only once (about 6–7 minutes per report on a laptop CPU).
@@ -104,7 +119,7 @@ flowchart TD
 5. **Embed the question** (`ingest/embed.py`): the question becomes a vector with the same model, plus the short instruction bge expects in front of questions.
 6. **Vector search** (`retrieval/vector.py`): Postgres finds the 5 chunks whose vectors are closest to the question's, using an HNSW index (a fast nearest-neighbour index). A search takes well under a second.
 7. **Generate** (`generation/answer.py`): the LLM gets the 5 chunks as numbered sources and must answer from them only, putting a marker like `[2]` after each claim. The code turns those markers into citations (company, year, pages) and drops any that point to a source that doesn't exist. If the sources don't contain the answer, the LLM replies with a fixed "couldn't find this" sentence instead of guessing.
-8. **Evaluate** (`evals/run_evals.py`): every question in a fixed set is answered and scored. Recall@5 and MRR check, without any LLM, whether retrieval found the expected pages. An LLM judge grades correctness against the expected answer, and checks faithfulness (is every claim backed by the retrieved chunks?). Latency and cost are recorded too. Each run's details are saved in `evals/runs/`, and a summary row goes into `evals/results.md`, so every later change can be compared against this baseline. *Still to do:* the real question set (written by the project owner) and the first baseline row.
+8. **Evaluate** (`evals/run_evals.py`): every question in a fixed set is answered and scored. Recall@5 and MRR check, without any LLM, whether retrieval found the expected pages. An LLM judge grades correctness against the expected answer, and checks faithfulness (is every claim backed by the retrieved chunks?). Latency and cost are recorded too. Each run's details are saved in `evals/runs/`, and a summary row goes into `evals/results.md`, so every later change can be compared against this baseline.
 
 ### Phase 2: Better retrieval ⬜
 

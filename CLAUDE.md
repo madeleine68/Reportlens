@@ -95,7 +95,7 @@ Keep this section up to date when commands change.
 
 ## Phase plan
 
-**Current phase: 1** (update this line as phases complete)
+**Current phase: 2** (update this line as phases complete)
 
 ### Phase 0: Setup
 
@@ -112,7 +112,7 @@ Keep this section up to date when commands change.
 - [x] Embed and store in pgvector with metadata (company, year, page, section)
 - [x] Retrieve top-5 by vector similarity, answer with page citations
 - [x] Eval runner: recall@5, MRR, answer correctness (LLM judge), faithfulness, latency, cost
-- [ ] Record the baseline row in `evals/results.md`
+- [x] Record the baseline row in `evals/results.md`
 
 ### Phase 2: Better retrieval
 

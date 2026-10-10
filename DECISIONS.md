@@ -165,3 +165,20 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** A new chunk starts at a heading once the current one has `CHUNK_MIN_TOKENS=100` (annual reports have ~750 headings each, many just table titles); blocks are never cut, and oversized blocks are split at line breaks (table rows stay whole). Each chunk gets a label (`RBC 2023 annual report | Section: X | Page 26`), with `CONTEXT_RESERVE_TOKENS=40` kept free so label + text stay under bge's 512 tokens (max seen: 457). The label is stored in `chunks.context`, embedded with the text, and read by the reranker (`RetrievedChunk.labelled_text()`). It is not in the full-text index; company and year come from filters. Each strategy gets its own database (`POSTGRES_DB=reportlens_contextual`): no schema branching, and switching costs no re-embedding. The naive `ingest_config` fingerprint is unchanged, so existing naive reports weren't reloaded.
 
 **Eval evidence (retrieval only, n=42, no filters):** vector recall@5 0.31 → 0.71 (MRR 0.17 → 0.52); keyword 0.35 → 0.32 (label not indexed); hybrid + rerank 0.45 → 0.63 with the reranker reading text only, 0.71 once it reads the label too. Chunks spanning several pages: ~65% → ~15%. 9,386 chunks (median 255 tokens) vs 5,991. With contextual chunks, reranking adds nothing over vector alone without filters; the combination with filters is still to be measured.
+
+## 2026-10-09 — Phase 2 retrieval comparison with filters (n=42)
+
+**Context:** The rerank and contextual-chunking entries above left the filtered combinations unmeasured. The warm filter cache meant these runs needed no LLM calls after the first one, and every run saw the same filters.
+
+**Eval evidence (retrieval only, n=42, company/year filters on):**
+
+| Chunks | vector | keyword | hybrid + rerank | vector + rerank |
+|---|---|---|---|---|
+| naive | 0.50 / 0.28 | 0.69 / 0.48 | **0.85 / 0.60** | — |
+| contextual | 0.76 / 0.61 | 0.76 / 0.57 | 0.76 / 0.56 | 0.78 / 0.57 |
+
+(recall@5 / MRR). The preliminary 33-question hybrid + filters + rerank result (0.88) holds up on all 42 (0.85).
+
+**Reading:** contextual chunks lift every retriever on its own, but with filters + hybrid + rerank, naive chunks score higher. Part of that is the metric. Recall is scored by page, and a naive chunk is 450 tokens that often span 2–3 pages, while a contextual chunk (median 255 tokens) usually covers one. So five naive hits cover more pages and more text. Some misses are real, though: q019 (BCE capex) and q040 (BCE workforce) find the right page with naive chunks only.
+
+**Decision:** Use naive + hybrid + filters + rerank for the Phase 2 answer-level run, since it is the best measured retrieval stack. Keep the contextual DB. Whether larger contextual chunks (e.g. `CHUNK_MIN_TOKENS` closer to 450) close the gap is an open question for later, not tuned here on 42 questions.

@@ -19,3 +19,8 @@ Append-only. One row per experiment.
 | 2026-10-09 | hybrid+rerank, contextual chunks (n=42) | 0.63 | 0.33 | n/a | n/a | 4.5s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=contextual |
 | 2026-10-09 | hybrid+rerank (reads label), contextual chunks (n=42) | 0.71 | 0.49 | n/a | n/a | 4.9s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=contextual; reranker reads label + text |
 | 2026-10-09 | vector+rerank (reads label), contextual chunks (n=42) | 0.68 | 0.50 | n/a | n/a | 4.6s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=contextual; reranker reads label + text |
+| 2026-10-09 | hybrid+filters+rerank, naive chunks (n=42) | 0.85 | 0.60 | n/a | n/a | 4.1s | $0.0000 (0 tok) | n=42; retrieval only; RRF top-20+20 → cross-encoder top-5; company/year filters; chunking=naive |
+| 2026-10-09 | vector+filters, contextual chunks (n=42) | 0.76 | 0.61 | n/a | n/a | 0.0s | $0.0000 (0 tok) | n=42; retrieval only; company/year filters; chunking=contextual |
+| 2026-10-09 | keyword+filters, contextual chunks (n=42) | 0.76 | 0.57 | n/a | n/a | 0.0s | $0.0000 (0 tok) | n=42; retrieval only; company/year filters; chunking=contextual |
+| 2026-10-09 | hybrid+filters+rerank, contextual chunks (n=42) | 0.76 | 0.56 | n/a | n/a | 4.0s | $0.0000 (0 tok) | n=42; retrieval only; RRF top-20+20 → cross-encoder top-5 (reads label); company/year filters; chunking=contextual |
+| 2026-10-09 | vector+filters+rerank, contextual chunks (n=42) | 0.78 | 0.57 | n/a | n/a | 4.2s | $0.0000 (0 tok) | n=42; retrieval only; vector top-40 → cross-encoder top-5 (reads label); company/year filters; chunking=contextual |

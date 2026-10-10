@@ -131,3 +131,16 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** RRF over the top 20 of each retriever (`HYBRID_CANDIDATES`), keeping the top 5; `RRF_K=60`. Both retrievers share the same LLM-extracted filters. Written by Claude at the owner's explicit request (`CLAUDE.md` had reserved it for the owner).
 
 **Eval evidence (retrieval only, n=42):** recall@5 0.62, MRR 0.45, vs keyword + filters 0.69 / 0.48 and vector + filters 0.50 / 0.28. More balanced by wording (0.68 report wording / 0.50 everyday, vs keyword's 0.95 / 0.32), but lower overall: when one retriever is clearly right, chunks both rank moderately can outvote it. Sensitivity: depth 5/10/20 × k 10/60 gave 0.62–0.65, so it isn't a tuning problem, and the defaults were kept rather than tuned to 42 questions. The right page is in the combined top-20 candidates for 39/39 answerable questions, so the next step is a reranker over those candidates, not a different merge.
+
+## 2026-10-09 — Cross-encoder reranking over 40 candidates
+
+**Context:** Hybrid search's top-20 vector + top-20 keyword candidates contain the right page for 39/39 answerable questions, but RRF's ordering only puts it in the top 5 for 62%.
+
+**Options considered:**
+- Tune or weight RRF: sensitivity runs gave only 0.62–0.65, and tuning to 42 questions risks overfitting.
+- LLM reranking (ask the fast model to pick the best chunks): strong, but it adds tokens to a daily-limited quota and is slower.
+- Cross-encoder (`cross-encoder/ms-marco-MiniLM-L-6-v2`, the model planned in `CLAUDE.md`): local, free, no quota.
+
+**Decision:** Cross-encoder reranking, behind `RETRIEVAL_RERANK`. The current retriever fetches `RERANK_CANDIDATES=40` (the hybrid pool size; the plan said 50) and the cross-encoder keeps the top 5. Works with any retrieval mode. About 3 s per question on the dev CPU; no question + chunk pair exceeded the model's 512-token limit (max 465).
+
+**Eval evidence (preliminary, retrieval only):** on the 33 answerable questions that completed before the fast model's 200k tokens/day limit (used by filter extraction and the judge) stopped the run, hybrid + filters + rerank scored recall@5 0.88, MRR 0.60, vs 0.62 / 0.45 without reranking and keyword + filters 0.77 / 0.54 on the same questions. Not yet in `results.md`: needs a full 42-question run.

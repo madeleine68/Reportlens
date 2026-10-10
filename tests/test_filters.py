@@ -142,9 +142,12 @@ def test_search_uses_filters_only_when_enabled(
     monkeypatch.setattr(
         search_mod, "extract_filters", lambda q, known: QueryFilters(companies=["rbc"])
     )
-    monkeypatch.setattr(
-        search_mod, "vector_search", lambda conn, q, filters: seen.setdefault("f", filters) and []
-    )
+
+    def fake_vector_search(conn, question, k, filters):
+        seen["f"] = filters
+        return []
+
+    monkeypatch.setattr(search_mod, "vector_search", fake_vector_search)
 
     search_mod.search(None, "What was RBC's net income?")
     assert seen["f"] == (QueryFilters(companies=["rbc"]) if enabled else None)

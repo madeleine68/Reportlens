@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     retrieval_mode: Literal["vector", "keyword", "hybrid"] = "vector"
     hybrid_candidates: int = 20  # results taken from each retriever before fusing
     rrf_k: int = 60  # RRF damping constant; 60 is the value from the original paper
+    # Rerank: fetch this many candidates, rescore them with a cross-encoder, keep retrieval_top_k.
+    retrieval_rerank: bool = False
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rerank_candidates: int = 40
 
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"

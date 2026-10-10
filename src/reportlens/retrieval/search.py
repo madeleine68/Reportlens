@@ -7,6 +7,7 @@ from reportlens.retrieval.filters import extract_filters, known_values
 from reportlens.retrieval.hybrid import hybrid_search
 from reportlens.retrieval.keyword import keyword_search
 from reportlens.retrieval.models import RetrievedChunk
+from reportlens.retrieval.rerank import rerank
 from reportlens.retrieval.vector import vector_search
 
 
@@ -14,14 +15,18 @@ def search(conn: psycopg.Connection, question: str) -> list[RetrievedChunk]:
     """Retrieve chunks for a question.
 
     RETRIEVAL_MODE picks the retriever (vector, keyword or hybrid); RETRIEVAL_USE_FILTERS adds
-    LLM-extracted company/year filters to either.
+    LLM-extracted company/year filters; RETRIEVAL_RERANK fetches more candidates and lets a
+    cross-encoder choose the final top k.
     """
     settings = get_settings()
     filters = None
     if settings.retrieval_use_filters:
         filters = extract_filters(question, known_values(conn))
-    if settings.retrieval_mode == "keyword":
-        return keyword_search(conn, question, filters=filters)
-    if settings.retrieval_mode == "hybrid":
-        return hybrid_search(conn, question, filters=filters)
-    return vector_search(conn, question, filters=filters)
+
+    retriever = {"vector": vector_search, "keyword": keyword_search, "hybrid": hybrid_search}[
+        settings.retrieval_mode
+    ]
+    if not settings.retrieval_rerank:
+        return retriever(conn, question, k=settings.retrieval_top_k, filters=filters)
+    candidates = retriever(conn, question, k=settings.rerank_candidates, filters=filters)
+    return rerank(question, candidates, top_n=settings.retrieval_top_k)

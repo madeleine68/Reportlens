@@ -120,7 +120,7 @@ Keep this section up to date when commands change.
 - [ ] Contextual chunking: section-aware splits plus a context prefix (company, year, section, one-line summary)
 - [x] Keyword retriever (Postgres FTS)
 - [x] Hybrid merge with RRF (written by Claude at the owner's explicit request, 2026-10-09)
-- [ ] Cross-encoder reranking: top-50 → top-5
+- [x] Cross-encoder reranking: top-50 → top-5 (top-40: the hybrid candidate pool)
 - [x] Metadata filters: LLM extracts `{company, year, section}` into a Pydantic model and applies them as SQL `WHERE` clauses (company and year done; section deferred until contextual chunking, see DECISIONS.md)
 - [ ] Eval run after each technique, one row each in `results.md`
 

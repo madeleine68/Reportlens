@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -7,7 +8,13 @@ from pydantic import BaseModel
 
 from reportlens.ingest.load import load_document
 from reportlens.ingest.models import Chunk, ParsedDocument
-from reportlens.retrieval.filters import QueryFilters, extract_filters, known_values
+from reportlens.retrieval.filters import (
+    FilterCache,
+    QueryFilters,
+    extract_filters,
+    extract_filters_cached,
+    known_values,
+)
 from reportlens.retrieval.vector import vector_search
 
 KNOWN = (["bce", "rbc", "scotiabank"], [2021, 2022, 2023, 2024])
@@ -139,8 +146,11 @@ def test_search_uses_filters_only_when_enabled(
     get_settings.cache_clear()
     seen: dict[str, object] = {}
     monkeypatch.setattr(search_mod, "known_values", lambda conn: KNOWN)
+    monkeypatch.setattr(search_mod, "filter_cache", lambda: None)
     monkeypatch.setattr(
-        search_mod, "extract_filters", lambda q, known: QueryFilters(companies=["rbc"])
+        search_mod,
+        "extract_filters_cached",
+        lambda q, known, cache: QueryFilters(companies=["rbc"]),
     )
 
     def fake_vector_search(conn, question, k, filters):
@@ -151,3 +161,63 @@ def test_search_uses_filters_only_when_enabled(
 
     search_mod.search(None, "What was RBC's net income?")
     assert seen["f"] == (QueryFilters(companies=["rbc"]) if enabled else None)
+
+
+# --- Filter cache ----------------------------------------------------------------------------
+
+
+class CountingStructured(FakeStructured):
+    def __init__(self, companies: list[str], years: list[int]) -> None:
+        super().__init__(companies, years)
+        self.calls = 0
+
+    def __call__(self, messages: Any, schema: type[BaseModel], tier: str) -> BaseModel:
+        self.calls += 1
+        return super().__call__(messages, schema, tier)
+
+
+def test_cache_skips_the_llm_for_a_repeated_question(tmp_path: Path) -> None:
+    llm = CountingStructured(["rbc"], [2023])
+    cache = FilterCache(tmp_path / "filters.json")
+
+    first = extract_filters_cached("RBC 2023 net income?", KNOWN, cache, structured=llm)
+    second = extract_filters_cached("RBC 2023 net income?", KNOWN, cache, structured=llm)
+
+    assert first == second == QueryFilters(companies=["rbc"], years=[2023])
+    assert llm.calls == 1
+
+
+def test_cache_persists_across_instances(tmp_path: Path) -> None:
+    path = tmp_path / "cache" / "filters.json"
+    extract_filters_cached("q", KNOWN, FilterCache(path), structured=FakeStructured(["bce"], []))
+
+    llm = CountingStructured([], [])
+    reloaded = extract_filters_cached("q", KNOWN, FilterCache(path), structured=llm)
+
+    assert reloaded == QueryFilters(companies=["bce"])
+    assert llm.calls == 0
+    assert '"question": "q"' in path.read_text()  # stored readably
+
+
+def test_cache_key_changes_with_question_known_values_and_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from reportlens.core.config import get_settings
+
+    base = FilterCache.key("q", KNOWN)
+    assert FilterCache.key("q2", KNOWN) != base
+    assert FilterCache.key("q", (["bce"], [2024])) != base
+    monkeypatch.setenv("LLM_MODEL_FAST", "another-model")
+    get_settings.cache_clear()
+    assert FilterCache.key("q", KNOWN) != base
+
+
+def test_failed_extraction_is_not_cached(tmp_path: Path) -> None:
+    cache = FilterCache(tmp_path / "filters.json")
+
+    def failing(*args: Any, **kwargs: Any) -> BaseModel:
+        raise RuntimeError("rate limited")
+
+    with pytest.raises(RuntimeError):
+        extract_filters_cached("q", KNOWN, cache, structured=failing)
+    assert cache.get(FilterCache.key("q", KNOWN)) is None

@@ -144,3 +144,11 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** Cross-encoder reranking, behind `RETRIEVAL_RERANK`. The current retriever fetches `RERANK_CANDIDATES=40` (the hybrid pool size; the plan said 50) and the cross-encoder keeps the top 5. Works with any retrieval mode. About 3 s per question on the dev CPU; no question + chunk pair exceeded the model's 512-token limit (max 465).
 
 **Eval evidence (preliminary, retrieval only):** on the 33 answerable questions that completed before the fast model's 200k tokens/day limit (used by filter extraction and the judge) stopped the run, hybrid + filters + rerank scored recall@5 0.88, MRR 0.60, vs 0.62 / 0.45 without reranking and keyword + filters 0.77 / 0.54 on the same questions. Not yet in `results.md`: needs a full 42-question run.
+
+## 2026-10-09 — Cache extracted filters on disk
+
+**Context:** Every retrieval-only eval run called the fast model once per question just to extract filters, and on 2026-10-09 that, together with the judge, used up the fast model's 200k tokens/day. The LLM can also extract slightly different filters from run to run, which mixes extraction noise into retriever comparisons.
+
+**Decision:** `FilterCache` stores filters in `data/cache/filters.json` (git-ignored), keyed by a SHA-256 of the fast model's name, the full system prompt (which includes the companies and years in the database) and the question. Changing any of those makes old entries stop matching, so nothing is stale. Only successful extractions are cached; writes are atomic (temp file + rename). Used by `search()` whenever filters are on.
+
+**Effect:** after one run warms the cache, retrieval-only evals make no LLM calls at all, and every run sees identical filters.

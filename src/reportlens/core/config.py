@@ -68,6 +68,11 @@ class Settings(BaseSettings):
         return self.data_dir / "raw"
 
     @property
+    def filter_cache_path(self) -> Path:
+        """Cache of LLM-extracted metadata filters, keyed by model, prompt and question."""
+        return self.data_dir / "cache" / "filters.json"
+
+    @property
     def parsed_dir(self) -> Path:
         """Directory holding cached parser output."""
         return self.data_dir / "parsed"

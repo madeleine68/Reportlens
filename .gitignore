@@ -4,6 +4,7 @@
 # Data (PDFs and parsed output are never committed)
 data/raw/
 data/parsed/
+data/cache/
 *.pdf
 
 # Python

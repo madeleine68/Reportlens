@@ -24,10 +24,14 @@ def document_id(doc: ParsedDocument) -> str:
 def ingest_config(doc: ParsedDocument) -> str:
     """Fingerprint of every setting that shapes a report's chunks and vectors."""
     s = get_settings()
-    return (
+    config = (
         f"converter={doc.converter_version};extract={doc.extract_version};"
         f"chunk={s.chunk_tokens}/{s.chunk_overlap};model={s.embedding_model}"
     )
+    # Naive keeps its original fingerprint, so already-loaded naive reports aren't re-embedded.
+    if s.chunking != "naive":
+        config += f";chunking={s.chunking}/{s.chunk_min_tokens}/{s.context_reserve_tokens}"
+    return config
 
 
 def is_current(conn: psycopg.Connection, doc: ParsedDocument) -> bool:
@@ -47,7 +51,7 @@ def load_document(
 ) -> None:
     """Embed chunks and replace the report's rows in one transaction (all or nothing)."""
     start = time.perf_counter()
-    vectors = embed([chunk.text for chunk in chunks]) if chunks else []
+    vectors = embed([chunk.embedding_text() for chunk in chunks]) if chunks else []
     doc_id = document_id(doc)
 
     with conn.transaction():
@@ -60,7 +64,7 @@ def load_document(
         with conn.cursor() as cur:
             cur.executemany(
                 "INSERT INTO chunks (chunk_id, document_id, company, year, section, pages, text,"
-                " num_tokens, embedding) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " num_tokens, embedding, context) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 [
                     (
                         c.chunk_id,
@@ -72,6 +76,7 @@ def load_document(
                         c.text,
                         c.num_tokens,
                         vector,
+                        c.context,
                     )
                     for c, vector in zip(chunks, vectors, strict=True)
                 ],

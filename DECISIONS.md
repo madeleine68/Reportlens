@@ -152,3 +152,16 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** `FilterCache` stores filters in `data/cache/filters.json` (git-ignored), keyed by a SHA-256 of the fast model's name, the full system prompt (which includes the companies and years in the database) and the question. Changing any of those makes old entries stop matching, so nothing is stale. Only successful extractions are cached; writes are atomic (temp file + rename). Used by `search()` whenever filters are on.
 
 **Effect:** after one run warms the cache, retrieval-only evals make no LLM calls at all, and every run sees identical filters.
+
+## 2026-10-09 — Contextual chunking: section-aware chunks with a metadata label
+
+**Context:** Naive 450-token windows ignore structure: 46% span pages, and chunks from different years of the same report look alike to vector search.
+
+**Options considered:**
+- The plan in `CLAUDE.md`: section-aware splits plus an LLM-written one-line summary per chunk ("contextual retrieval"). The summary would cost ~3–4M fast-model tokens for ~9k chunks, about 18 days of Groq's free tier.
+- Section-aware splits with a deterministic label built from metadata we already have.
+- Store both strategies in one table (a `chunking` column in every query and key) vs one database per strategy.
+
+**Decision:** A new chunk starts at a heading once the current one has `CHUNK_MIN_TOKENS=100` (annual reports have ~750 headings each, many just table titles); blocks are never cut, and oversized blocks are split at line breaks (table rows stay whole). Each chunk gets a label (`RBC 2023 annual report | Section: X | Page 26`), with `CONTEXT_RESERVE_TOKENS=40` kept free so label + text stay under bge's 512 tokens (max seen: 457). The label is stored in `chunks.context`, embedded with the text, and read by the reranker (`RetrievedChunk.labelled_text()`). It is not in the full-text index; company and year come from filters. Each strategy gets its own database (`POSTGRES_DB=reportlens_contextual`): no schema branching, and switching costs no re-embedding. The naive `ingest_config` fingerprint is unchanged, so existing naive reports weren't reloaded.
+
+**Eval evidence (retrieval only, n=42, no filters):** vector recall@5 0.31 → 0.71 (MRR 0.17 → 0.52); keyword 0.35 → 0.32 (label not indexed); hybrid + rerank 0.45 → 0.63 with the reranker reading text only, 0.71 once it reads the label too. Chunks spanning several pages: ~65% → ~15%. 9,386 chunks (median 255 tokens) vs 5,991. With contextual chunks, reranking adds nothing over vector alone without filters; the combination with filters is still to be measured.

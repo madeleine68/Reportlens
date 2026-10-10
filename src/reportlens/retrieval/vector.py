@@ -24,7 +24,8 @@ def search_sql(where: str = "") -> str:
     cosine similarity. Ordering by the bare distance expression lets Postgres use the HNSW index.
     """
     return f"""
-        SELECT chunk_id, company, year, section, pages, text, 1 - (embedding <=> %(q)s) AS score
+        SELECT chunk_id, company, year, section, pages, text, context,
+               1 - (embedding <=> %(q)s) AS score
         FROM chunks
         {where}
         ORDER BY embedding <=> %(q)s
@@ -73,9 +74,10 @@ def vector_search(
             section=section,
             pages=pages,
             text=text,
+            context=context,
             score=float(score),
         )
-        for chunk_id, company, year, section, pages, text, score in rows
+        for chunk_id, company, year, section, pages, text, context, score in rows
     ]
     log.info(
         "retrieval.vector k=%d filtered=%s results=%d top_score=%.3f latency=%.3fs",

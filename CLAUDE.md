@@ -117,7 +117,7 @@ Keep this section up to date when commands change.
 
 ### Phase 2: Better retrieval
 
-- [ ] Contextual chunking: section-aware splits plus a context prefix (company, year, section, one-line summary)
+- [x] Contextual chunking: section-aware splits plus a context prefix (company, year, section, one-line summary) (label from metadata, no LLM summary; separate `reportlens_contextual` DB; see DECISIONS.md)
 - [x] Keyword retriever (Postgres FTS)
 - [x] Hybrid merge with RRF (written by Claude at the owner's explicit request, 2026-10-09)
 - [x] Cross-encoder reranking: top-50 → top-5 (top-40: the hybrid candidate pool)

@@ -28,7 +28,8 @@ _QUERY_CTE = """
 def _run(conn: psycopg.Connection, question: str, k: int, filters: QueryFilters | None):
     conditions, params = filter_conditions(filters)
     sql = f"""{_QUERY_CTE}
-        SELECT chunk_id, company, year, section, pages, text, ts_rank_cd(tsv, query.q) AS score
+        SELECT chunk_id, company, year, section, pages, text, context,
+               ts_rank_cd(tsv, query.q) AS score
         FROM chunks, query
         {where_sql(["tsv @@ query.q", *conditions])}
         ORDER BY score DESC, chunk_id
@@ -65,9 +66,10 @@ def keyword_search(
             section=section,
             pages=pages,
             text=text,
+            context=context,
             score=float(score),
         )
-        for chunk_id, company, year, section, pages, text, score in rows
+        for chunk_id, company, year, section, pages, text, context, score in rows
     ]
     log.info(
         "retrieval.keyword k=%d filtered=%s results=%d latency=%.3fs",

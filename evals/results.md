@@ -11,3 +11,11 @@ Append-only. One row per experiment.
 | 2026-10-09 | vector+filters (n=42) | 0.50 | 0.28 | n/a | n/a | 0.5s | $0.0000 (0 tok) | n=42; retrieval only; vector + company/year filters |
 | 2026-10-09 | keyword+filters (n=42) | 0.69 | 0.48 | n/a | n/a | 2.4s | $0.0000 (0 tok) | n=42; retrieval only; Postgres FTS + company/year filters |
 | 2026-10-09 | hybrid+filters (n=42) | 0.62 | 0.45 | n/a | n/a | 0.6s | $0.0000 (0 tok) | n=42; retrieval only; RRF (k=60) over top-20 vector + top-20 keyword, + company/year filters |
+| 2026-10-09 | vector, naive chunks (n=42) | 0.31 | 0.17 | n/a | n/a | 0.0s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=naive |
+| 2026-10-09 | keyword, naive chunks (n=42) | 0.35 | 0.18 | n/a | n/a | 0.1s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=naive |
+| 2026-10-09 | hybrid+rerank, naive chunks (n=42) | 0.45 | 0.30 | n/a | n/a | 4.1s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=naive |
+| 2026-10-09 | vector, contextual chunks (n=42) | 0.71 | 0.52 | n/a | n/a | 0.0s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=contextual |
+| 2026-10-09 | keyword, contextual chunks (n=42) | 0.32 | 0.21 | n/a | n/a | 0.2s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=contextual |
+| 2026-10-09 | hybrid+rerank, contextual chunks (n=42) | 0.63 | 0.33 | n/a | n/a | 4.5s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=contextual |
+| 2026-10-09 | hybrid+rerank (reads label), contextual chunks (n=42) | 0.71 | 0.49 | n/a | n/a | 4.9s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=contextual; reranker reads label + text |
+| 2026-10-09 | vector+rerank (reads label), contextual chunks (n=42) | 0.68 | 0.50 | n/a | n/a | 4.6s | $0.0000 (0 tok) | n=42; retrieval only; no filters; chunking=contextual; reranker reads label + text |

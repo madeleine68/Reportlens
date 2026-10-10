@@ -13,3 +13,8 @@ class RetrievedChunk(BaseModel):
     pages: list[int]
     text: str
     score: float  # higher is more relevant; scale depends on the retriever
+    context: str = ""  # contextual chunking's label ('' for naive chunks)
+
+    def labelled_text(self) -> str:
+        """The label (if any), then the text: what was embedded and what the reranker reads."""
+        return f"{self.context}\n{self.text}" if self.context else self.text

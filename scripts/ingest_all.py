@@ -13,7 +13,7 @@ import time
 from reportlens.core.config import get_settings
 from reportlens.core.db import connect
 from reportlens.core.logging import setup_logging
-from reportlens.ingest.chunking import chunk_document
+from reportlens.ingest.chunking import chunk
 from reportlens.ingest.load import is_current, load_document
 from reportlens.ingest.parse import parse_cached
 
@@ -44,7 +44,7 @@ def main() -> int:
                 if is_current(conn, doc):
                     status = "already loaded"
                 else:
-                    chunks = chunk_document(doc)
+                    chunks = chunk(doc)  # strategy from the CHUNKING setting
                     load_document(conn, doc, chunks)
                     status = f"loaded {len(chunks)} chunks"
             except Exception as err:  # keep going so one bad PDF doesn't stop the batch

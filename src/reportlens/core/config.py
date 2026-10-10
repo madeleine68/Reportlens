@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     embedding_query_prefix: str = "Represent this sentence for searching relevant passages: "
     chunk_tokens: int = 450
     chunk_overlap: int = 50
+    # "naive" (Phase 1 fixed windows) or "contextual" (Phase 2 section-aware, with a label).
+    # Keep each strategy in its own database (POSTGRES_DB) to compare them without re-embedding.
+    chunking: Literal["naive", "contextual"] = "naive"
+    chunk_min_tokens: int = 100  # contextual: a heading starts a new chunk only after this many
+    context_reserve_tokens: int = 40  # contextual: tokens kept free for the label
 
     # Retrieval
     retrieval_top_k: int = 5

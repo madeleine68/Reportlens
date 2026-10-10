@@ -38,4 +38,9 @@ class Chunk(BaseModel):
     text: str
     pages: list[int]  # every page the chunk's text comes from, ascending
     section: str | None  # section of the block the chunk starts in
-    num_tokens: int
+    num_tokens: int  # tokens in `text` (the label is not counted)
+    context: str = ""  # contextual chunking's label, embedded with the text; "" for naive chunks
+
+    def embedding_text(self) -> str:
+        """What gets embedded: the label (if any) followed by the chunk text."""
+        return f"{self.context}\n{self.text}" if self.context else self.text

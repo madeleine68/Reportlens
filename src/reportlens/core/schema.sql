@@ -35,3 +35,6 @@ CREATE INDEX IF NOT EXISTS chunks_company_year ON chunks (company, year);
 ALTER TABLE chunks
     ADD COLUMN IF NOT EXISTS tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED;
 CREATE INDEX IF NOT EXISTS chunks_tsv_gin ON chunks USING gin (tsv);
+
+-- Phase 2 contextual chunking: the label embedded with each chunk ('' for naive chunks).
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS context TEXT NOT NULL DEFAULT '';

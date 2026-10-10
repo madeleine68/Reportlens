@@ -60,6 +60,7 @@ def test_results_carry_citation_metadata(conn: psycopg.Connection) -> None:
         "section": "Section 2",
         "pages": [3],
         "text": "chunk 2",
+        "context": "",  # naive chunks carry no label
     }
 
 

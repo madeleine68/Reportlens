@@ -28,7 +28,9 @@ def rerank(question: str, chunks: list[RetrievedChunk], top_n: int) -> list[Retr
     if not chunks:
         return []
     start = time.perf_counter()
-    scores = _model().predict([(question, c.text) for c in chunks], show_progress_bar=False)
+    # Read the label too, so the reranker knows each chunk's company, year and section.
+    pairs = [(question, c.labelled_text()) for c in chunks]
+    scores = _model().predict(pairs, show_progress_bar=False)
     ranked = sorted(zip(chunks, scores, strict=True), key=lambda pair: pair[1], reverse=True)
     results = [c.model_copy(update={"score": float(s)}) for c, s in ranked[:top_n]]
     log.info(

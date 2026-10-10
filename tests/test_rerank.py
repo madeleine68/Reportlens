@@ -43,6 +43,12 @@ def test_reorders_by_cross_encoder_score_and_keeps_top_n(fake_model: FakeCrossEn
     assert fake_model.pairs[0] == ("net income rose", "board meeting")  # question paired with text
 
 
+def test_reranker_reads_the_label_with_the_text(fake_model: FakeCrossEncoder) -> None:
+    labelled = _c("a", "net income").model_copy(update={"context": "RBC 2023 annual report"})
+    rerank("q", [labelled], top_n=1)
+    assert fake_model.pairs == [("q", "RBC 2023 annual report\nnet income")]
+
+
 def test_empty_candidates_skip_the_model(fake_model: FakeCrossEncoder) -> None:
     assert rerank("q", [], top_n=5) == []
     assert fake_model.pairs == []

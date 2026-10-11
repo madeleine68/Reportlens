@@ -8,7 +8,7 @@ import time
 from functools import lru_cache
 from typing import Literal
 
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 from pydantic import BaseModel, ValidationError
 
 from reportlens.core.config import get_settings
@@ -88,7 +88,8 @@ def structured[T: BaseModel](
     """Ask for JSON matching `schema` and return a validated Pydantic object.
 
     Uses JSON mode (widely supported) plus Pydantic validation, retrying once with the
-    validation error fed back to the model.
+    validation error fed back to the model. Also retries when the provider itself rejects
+    malformed JSON (Groq returns a 400 `json_validate_failed`).
     """
     schema_json = json.dumps(schema.model_json_schema())
     system = {
@@ -98,7 +99,13 @@ def structured[T: BaseModel](
     convo = [system, *messages]
 
     for attempt in range(max_retries + 1):
-        reply = chat(convo, tier=tier, json_mode=True)
+        try:
+            reply = chat(convo, tier=tier, json_mode=True)
+        except BadRequestError as err:
+            if err.code != "json_validate_failed" or attempt == max_retries:
+                raise
+            log.warning("llm.structured provider rejected JSON (attempt %d)", attempt + 1)
+            continue
         try:
             return schema.model_validate_json(reply.text)
         except ValidationError as err:

@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from openai import BadRequestError
 from pydantic import BaseModel, ValidationError
 
 from reportlens.core import llm
@@ -91,3 +92,28 @@ def test_structured_raises_after_retries_exhausted(fake_client: MagicMock) -> No
     with pytest.raises(ValidationError):
         llm.structured([{"role": "user", "content": "x"}], Filters)
     assert fake_client.chat.completions.create.call_count == 2
+
+
+def _json_rejected(code: str = "json_validate_failed") -> BadRequestError:
+    response = MagicMock(status_code=400, headers={})
+    return BadRequestError("rejected", response=response, body={"code": code})
+
+
+def test_structured_retries_when_provider_rejects_json(fake_client: MagicMock) -> None:
+    fake_client.chat.completions.create.side_effect = [
+        _json_rejected(),
+        _fake_completion('{"company": "RBC", "year": 2023}'),
+    ]
+
+    result = llm.structured([{"role": "user", "content": "RBC 2023"}], Filters)
+
+    assert result.year == 2023
+    assert fake_client.chat.completions.create.call_count == 2
+
+
+def test_structured_does_not_retry_other_bad_requests(fake_client: MagicMock) -> None:
+    fake_client.chat.completions.create.side_effect = _json_rejected(code="model_not_found")
+
+    with pytest.raises(BadRequestError):
+        llm.structured([{"role": "user", "content": "x"}], Filters)
+    assert fake_client.chat.completions.create.call_count == 1

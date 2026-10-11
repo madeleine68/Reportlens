@@ -182,3 +182,17 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Reading:** contextual chunks lift every retriever on its own, but with filters + hybrid + rerank, naive chunks score higher. Part of that is the metric. Recall is scored by page, and a naive chunk is 450 tokens that often span 2–3 pages, while a contextual chunk (median 255 tokens) usually covers one. So five naive hits cover more pages and more text. Some misses are real, though: q019 (BCE capex) and q040 (BCE workforce) find the right page with naive chunks only.
 
 **Decision:** Use naive + hybrid + filters + rerank for the Phase 2 answer-level run, since it is the best measured retrieval stack. Keep the contextual DB. Whether larger contextual chunks (e.g. `CHUNK_MIN_TOKENS` closer to 450) close the gap is an open question for later, not tuned here on 42 questions.
+
+## 2026-10-10 — Phase 2 result: answer-level run of the best stack
+
+**Context:** The Phase 2 retrieval stack (naive chunks + company/year filters + hybrid RRF + cross-encoder rerank) had only retrieval-only scores. This is the one answer-level run that fits Groq's daily quota.
+
+**Eval evidence (n=42):** recall@5 0.85, MRR 0.60, correctness **0.74**, faithfulness 1.00, p50 latency 7.7 s, ~2.9k tokens/question. On the 31 questions shared with the Phase 1 baseline, correctness went from 0.42 to **0.79**. By type: numeric 0.70 (n=20), trend 0.78 (n=9), comparison 0.25 (n=4), lookup/relationship/out-of-corpus 1.00. The remaining misses fall into two groups, each covered by a later phase:
+- Adjusted vs reported figures or the wrong table row (q001, q013, q014, q015, q036): the right page is retrieved but the number loses its label. → Phase 3 tables.
+- Comparisons across two reports (q002, q043): one top-5 search can't cover both. → Phase 4 agentic layer.
+
+**Run note:** q037 failed with a Groq `400 json_validate_failed`: the provider rejects malformed JSON-mode output server-side, which `llm.structured` didn't retry (it only retried Pydantic errors). It now retries that error under the same single-retry budget. q037 was then re-run on its own with the same config and merged into the run file, rather than spending ~125k tokens on a full re-run. The Notes column says so.
+
+**Not done in Phase 2: section filter.** The filter extracts only company and year. A section filter was deferred until contextual chunking, but the chosen stack uses naive chunks, whose section labels are unreliable, and no failure above is caused by the wrong section. It is left out rather than built without eval evidence; revisit if the Phase 4 router needs it.
+
+**Comparability caveat:** the Phase 1 baseline and metadata-filters rows are n=31. Re-running them on n=42 would cost one day of quota each; the 31-question overlap above gives a like-for-like comparison in the meantime.

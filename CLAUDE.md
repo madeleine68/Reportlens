@@ -96,7 +96,7 @@ Keep this section up to date when commands change.
 
 ## Phase plan
 
-**Current phase: 2** (update this line as phases complete)
+**Current phase: 3** (update this line as phases complete)
 
 ### Phase 0: Setup
 
@@ -121,8 +121,8 @@ Keep this section up to date when commands change.
 - [x] Keyword retriever (Postgres FTS)
 - [x] Hybrid merge with RRF (written by Claude at the owner's explicit request, 2026-10-09)
 - [x] Cross-encoder reranking: top-50 → top-5 (top-40: the hybrid candidate pool)
-- [x] Metadata filters: LLM extracts `{company, year, section}` into a Pydantic model and applies them as SQL `WHERE` clauses (company and year done; section deferred until contextual chunking, see DECISIONS.md)
-- [ ] Eval run after each technique, one row each in `results.md`
+- [x] Metadata filters: LLM extracts `{company, year, section}` into a Pydantic model and applies them as SQL `WHERE` clauses (company and year done; section filter not built, see DECISIONS.md 2026-10-10)
+- [x] Eval run after each technique, one row each in `results.md` (best stack: naive + filters + hybrid + rerank, correctness 0.74 on n=42; see DECISIONS.md)
 
 ### Phase 3: Structured data
 

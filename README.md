@@ -27,7 +27,7 @@ uv run python scripts/ask.py "How many wireless subscribers did Bell have in 202
 |-------|--------------|--------|
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
-| 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | 🟡 In progress: all five techniques built; full answer-level comparison pending |
+| 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
 | 3. Structured data | Real tables, SQL tool, knowledge graph | ⬜ Planned |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
 | 5. Ship | API, UI, deployment | ⬜ Planned |
@@ -36,15 +36,15 @@ uv run python scripts/ask.py "How many wireless subscribers did Bell have in 202
 
 ## Results so far
 
-Every technique is measured on the same 31-question eval set (`evals/questions.jsonl`). Full history: [`evals/results.md`](evals/results.md).
+Every technique is measured on a fixed eval set (`evals/questions.jsonl`): 31 questions at first, 42 once paraphrased questions were added. Full history: [`evals/results.md`](evals/results.md).
 
-| Experiment | Recall@5 | MRR | Correctness | Faithfulness |
-|------------|----------|-----|-------------|--------------|
-| Phase 1 baseline: naive chunks, vector top-5 | 0.25 | 0.15 | 0.42 | 0.92 |
-| + metadata filters (company, year) | 0.52 | 0.27 | **0.53** | **1.00** |
-| Keyword search + filters *(retrieval only)* | **0.84** | **0.61** | n/a | n/a |
+| Experiment | Questions | Recall@5 | MRR | Correctness | Faithfulness |
+|------------|-----------|----------|-----|-------------|--------------|
+| Phase 1 baseline: naive chunks, vector top-5 | 31 | 0.25 | 0.15 | 0.42 | 0.92 |
+| + metadata filters (company, year) | 31 | 0.52 | 0.27 | 0.53 | **1.00** |
+| **Phase 2 stack:** filters + hybrid search + rerank | 42 | **0.85** | **0.60** | **0.74** | **1.00** |
 
-*Retrieval-only rows score search without generating answers. The keyword row's full run hit the LLM provider's daily token limit, so answers will be scored in a re-run.*
+On the 31 questions shared with the baseline, the Phase 2 stack's correctness is **0.79**, against 0.42. The free LLM tier allows about one full run per day, so most technique-by-technique comparisons below are *retrieval only*: they score search (recall@5, MRR) without generating answers.
 
 **Does the wording of the question matter?** Most eval questions borrowed the reports' own terms, which favours keyword search. So 11 questions were rephrased in everyday words (same facts, same pages), e.g. *"How many cellphone customers did Bell have?"* instead of *"How many mobile phone subscribers…"*. Retrieval recall@5 on those 11 facts:
 
@@ -57,7 +57,7 @@ Keyword search wins when the question uses the report's exact terms and collapse
 
 **Hybrid search result:** recall@5 **0.62** (MRR 0.45), more balanced across wordings (0.68 report wording, 0.50 everyday wording) but *below* keyword alone overall. RRF rewards chunks that both retrievers rank fairly well, so a so-so chunk ranked about 6th by both can push out the right page that keyword search ranked 1st. Tuning RRF changed little (0.62–0.65). Yet the right page is somewhere in the combined top-20 candidates for **all 39** answerable questions: the candidates are fine, the ordering isn't. That's the job of the next step, **reranking**.
 
-**Reranking result (preliminary):** with a cross-encoder rescoring the top 40 hybrid candidates, recall@5 rose from 0.62 to **0.88** (MRR 0.45 → 0.60) on the 33 answerable questions that finished before the LLM provider's daily limit cut the run short. A full 42-question run is still needed before it goes into the results table.
+**Reranking result:** with a cross-encoder rescoring the top 40 hybrid candidates, recall@5 rose from 0.62 to **0.85** (MRR 0.45 → 0.60) on all 42 questions, the best retrieval score of any combination.
 
 **Contextual chunking result:** chunks that follow section boundaries and carry a label (company, year, section, pages) more than doubled vector search's recall@5, *with no filters at all*:
 
@@ -67,7 +67,19 @@ Keyword search wins when the question uses the report's exact terms and collapse
 | Keyword | 0.35 | 0.32 |
 | Hybrid + rerank | 0.45 | **0.71** |
 
-The label puts the company and year into every embedding, so vector search can tell RBC 2023 from RBC 2021 by itself. Keyword search doesn't change, because the label isn't in the full-text index. Citations also get more precise: about 15% of contextual chunks span more than one page, against about 65% of naive ones. The combination with metadata filters is still to be measured.
+The label puts the company and year into every embedding, so vector search can tell RBC 2023 from RBC 2021 by itself. Keyword search doesn't change, because the label isn't in the full-text index. Citations also get more precise: about 15% of contextual chunks span more than one page, against about 65% of naive ones.
+
+**With metadata filters, though, naive chunks come out ahead:**
+
+| Retriever (with filters) | Naive chunks | Contextual chunks |
+|--------------------------|--------------|-------------------|
+| Vector | 0.50 | **0.76** |
+| Keyword | 0.69 | **0.76** |
+| Hybrid + rerank | **0.85** | 0.76 |
+
+Filters already supply the company and year that the label added, so most of contextual chunking's advantage disappears. And recall is scored by page: a naive chunk often spans 2–3 pages, so five naive hits cover more pages than five shorter contextual ones. The final Phase 2 stack therefore uses naive chunks. Larger contextual chunks might close the gap; that's left as an open question rather than tuned on 42 questions.
+
+**Where the Phase 2 stack still fails** (10 of 42 questions wrong, 2 partly right): mostly numbers whose right page *was* retrieved but whose label got lost, such as an *adjusted* figure reported instead of the *reported* one (Phase 3: tables), and comparisons that need two reports at once (Phase 4: agentic layer).
 
 What the baseline shows, and which phase targets each problem:
 
@@ -150,7 +162,7 @@ flowchart TD
 7. **Generate** (`generation/answer.py`): the LLM gets the 5 chunks as numbered sources and must answer from them only, putting a marker like `[2]` after each claim. The code turns those markers into citations (company, year, pages) and drops any that point to a source that doesn't exist. If the sources don't contain the answer, the LLM replies with a fixed "couldn't find this" sentence instead of guessing.
 8. **Evaluate** (`evals/run_evals.py`): every question in a fixed set is answered and scored. Recall@5 and MRR check, without any LLM, whether retrieval found the expected pages. An LLM judge grades correctness against the expected answer, and checks faithfulness (is every claim backed by the retrieved chunks?). Latency and cost are recorded too. Each run's details are saved in `evals/runs/`, and a summary row goes into `evals/results.md`, so every later change can be compared against this baseline.
 
-### Phase 2: Better retrieval 🟡
+### Phase 2: Better retrieval ✅
 
 Improves step 6 above. Each technique is added one at a time, with an eval run after each, so its effect can be measured on its own.
 
@@ -163,7 +175,7 @@ flowchart LR
     kw --> rrf
     rrf --> rerank["Rerank<br/>cross-encoder rescores<br/>top 40, keeps best 5"]
     rerank --> gen["Generate answer"]
-    ctx["Contextual chunking<br/>split by section, add a<br/>company / year / section prefix"] -.->|"better chunks in the database"| vec
+    ctx["Contextual chunking<br/>split by section, add a<br/>company / year / section prefix"] -.->|"alternative chunk database<br/>(built and measured, not in the final stack)"| vec
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
@@ -171,7 +183,7 @@ flowchart LR
 ```
 
 - **Contextual chunking** (`ingest/chunking.py`, `CHUNKING=contextual`): a new chunk starts at a heading, once the current chunk has at least 100 tokens, so the many small table titles don't create tiny chunks. Paragraphs are never cut, and oversized tables are split between rows. Each chunk gets a short label, such as `RBC 2023 annual report | Section: Net income | Page 26`. The label is embedded with the text and read by the reranker, so a chunk still makes sense on its own. The plan also called for an LLM-written one-line summary per chunk, but that would take about 3–4 million tokens (roughly 18 days of the free tier), so the label uses metadata only. Contextual chunks live in their own database (`POSTGRES_DB=reportlens_contextual`), so the two strategies can be compared without re-embedding.
-- **Metadata filter** (`retrieval/filters.py`): the fast LLM reads which companies and fiscal years the question names, so "RBC's 2023 net income" only searches RBC's 2023 report. It knows nicknames like Bell → BCE and expands ranges like "2022 to 2024". Values are checked against the database, and if a filter matches nothing, the search runs unfiltered, so a bad filter is never worse than none. Extracted filters are cached in `data/cache/filters.json`, so a repeated question (as in every eval run) costs no LLM call and always gets the same filters. Turn it on with `RETRIEVAL_USE_FILTERS=true`. Section filtering waits for contextual chunking, which will give chunks clean section labels.
+- **Metadata filter** (`retrieval/filters.py`): the fast LLM reads which companies and fiscal years the question names, so "RBC's 2023 net income" only searches RBC's 2023 report. It knows nicknames like Bell → BCE and expands ranges like "2022 to 2024". Values are checked against the database, and if a filter matches nothing, the search runs unfiltered, so a bad filter is never worse than none. Extracted filters are cached in `data/cache/filters.json`, so a repeated question (as in every eval run) costs no LLM call and always gets the same filters. Turn it on with `RETRIEVAL_USE_FILTERS=true`. There's no section filter: no failing question was caused by a wrong section, so it wasn't worth the added complexity.
 - **Keyword search** (`retrieval/keyword.py`): Postgres full-text search finds chunks containing the question's words, after stemming ("incomes" → "incom") and dropping common words like "what". Any word can match, and chunks with more matching words close together rank higher. It catches exact terms that vector search blurs, like "CET1" or "attributable to equity holders". Ranking uses `ts_rank_cd`, which is BM25-like but **not true BM25**: it doesn't weight rare words above common ones across the whole collection. Use it with `RETRIEVAL_MODE=keyword`.
 - **Hybrid merge (RRF)** (`retrieval/hybrid.py`): takes the top 20 from vector search and the top 20 from keyword search, and scores each chunk by adding `1 / (60 + rank)` for every list it appears in. Only the ranks count, not the raw scores, which are on different scales. Chunks both retrievers like rise to the top. Use it with `RETRIEVAL_MODE=hybrid`.
 - **Rerank** (`retrieval/rerank.py`): the retriever fetches 40 candidates, and a cross-encoder (`ms-marco-MiniLM-L-6-v2`) reads the question and each candidate *together* and scores how well the candidate answers it. The best 5 are kept. That's slower (about 3 s per question on a laptop CPU) but much more accurate than the retrievers, which look at the question and chunks separately. Turn it on with `RETRIEVAL_RERANK=true`; it works on top of any retrieval mode.

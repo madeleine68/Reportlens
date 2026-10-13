@@ -16,6 +16,8 @@ uv run pytest                 # fast tests (add -m slow for tests that run real 
 uv run python scripts/ingest_all.py --companies bce,rbc,scotiabank
 # Contextual chunks, in their own database:
 POSTGRES_DB=reportlens_contextual CHUNKING=contextual uv run python scripts/ingest_all.py --companies bce,rbc,scotiabank
+# Tables kept as rows and columns (slow: ~25 min per report on a laptop CPU), in their own database:
+PARSE_TABLES=true CHUNKING=tables POSTGRES_DB=reportlens_tables uv run python scripts/ingest_all.py --companies bce,rbc,scotiabank
 
 # Ask a question:
 uv run python scripts/ask.py "How many wireless subscribers did Bell have in 2024?"

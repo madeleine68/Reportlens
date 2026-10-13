@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from docling_core.types.doc import (
@@ -182,3 +183,71 @@ def test_parse_pdf_end_to_end(tmp_path: Path) -> None:
         b.page for b in result.blocks if "dividend" in b.text
     }
     assert pages == {1, 2}
+
+
+def test_compact_markdown_strips_column_padding() -> None:
+    padded = (
+        "| ($ millions)   | 2023     |\n"
+        "|----------------|----------|\n"
+        "| Net income     | $ 7,528  |"
+    )
+    assert parse.compact_markdown(padded) == (
+        "| ($ millions) | 2023 |\n| --- | --- |\n| Net income | $ 7,528 |"
+    )
+
+
+def test_table_parses_use_their_own_cache_files_and_version(
+    raw_pdf: tuple[Path, list[Path]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf, calls = raw_pdf
+    light = parse.parse_cached(pdf)
+    monkeypatch.setenv("PARSE_TABLES", "true")
+    get_settings.cache_clear()
+    tables = parse.parse_cached(pdf)
+
+    assert len(calls) == 2  # the light cache isn't reused for a table parse...
+    assert (light.converter_version, tables.converter_version) == ("1-light", "2-tables")
+    folder = pdf.parents[2] / "parsed" / "rbc"
+    assert (folder / "2023.tables.json").exists()
+    assert (folder / "2023.json").exists()  # ...and isn't overwritten either
+
+
+def test_page_slices_cover_every_page_once() -> None:
+    assert parse.page_slices(45, 20) == [(1, 20), (21, 40), (41, 45)]
+    assert parse.page_slices(20, 20) == [(1, 20)]
+
+
+def _fake_run(outcomes: list[str]):
+    """Stub for subprocess.run: each call crashes, hangs or writes a one-page slice."""
+    calls: list[list[str]] = []
+
+    def run(cmd: list[str], timeout: float, capture_output: bool):
+        calls.append(cmd)
+        outcome = outcomes[len(calls) - 1]
+        if outcome == "hang":
+            raise parse.subprocess.TimeoutExpired(cmd, timeout)
+        if outcome == "ok":
+            _sample_doc().save_as_json(Path(cmd[-1]))
+        return SimpleNamespace(returncode=0 if outcome == "ok" else 139)
+
+    return run, calls
+
+
+def test_slice_is_retried_after_a_crash_and_a_hang(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, calls = _fake_run(["crash", "hang", "ok"])
+    monkeypatch.setattr(parse.subprocess, "run", run)
+
+    doc = parse._convert_slice_in_subprocess(Path("r.pdf"), 21, 40)
+
+    assert len(calls) == 3
+    assert calls[0][-4:-1] == ["r.pdf", "21", "40"]
+    assert doc.num_pages() == 2
+
+
+def test_slice_gives_up_after_all_attempts_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    run, calls = _fake_run(["crash"] * parse.SLICE_ATTEMPTS)
+    monkeypatch.setattr(parse.subprocess, "run", run)
+
+    with pytest.raises(RuntimeError, match="pages 1-20"):
+        parse._convert_slice_in_subprocess(Path("r.pdf"), 1, 20)
+    assert len(calls) == parse.SLICE_ATTEMPTS

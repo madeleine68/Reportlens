@@ -82,6 +82,7 @@ reportlens/
 uv sync                                              # install deps
 docker compose up -d                                 # start postgres (+ neo4j later)
 uv run python scripts/ingest_all.py                  # parse, chunk, embed, load
+PARSE_TABLES=true CHUNKING=tables POSTGRES_DB=reportlens_tables uv run python scripts/ingest_all.py  # Phase 3: tables kept as rows/columns (~25 min/report on CPU)
 uv run python scripts/ask.py "What was RBC's net income in 2023?"   # ask one question
 uv run python evals/run_evals.py --name "baseline"   # run evals, append to results.md
 uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.jsonl  # runner smoke test

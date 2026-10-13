@@ -196,3 +196,16 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Not done in Phase 2: section filter.** The filter extracts only company and year. A section filter was deferred until contextual chunking, but the chosen stack uses naive chunks, whose section labels are unreliable, and no failure above is caused by the wrong section. It is left out rather than built without eval evidence; revisit if the Phase 4 router needs it.
 
 **Comparability caveat:** the Phase 1 baseline and metadata-filters rows are n=31. Re-running them on n=42 would cost one day of quota each; the 31-question overlap above gives a like-for-like comparison in the meantime.
+
+## 2026-10-11 — Table-mode parsing in isolated 20-page slices
+
+**Context:** Phase 3 turns on Docling's table-structure model (`PARSE_TABLES=true`). On this Intel Mac (CPU, `torch==2.2.2`), whole-report conversions failed at random: two full ingest runs segfaulted (exit 139) partway through their second report, and RBC 2021 ran for over 1.5 hours with no result. Diagnosis: timed 20-page slices of RBC 2021 each finished in 1–4 minutes (about 27 min total), except one slice that segfaulted. That slice then passed 3 times in a row, and each of its 20 pages passed twice on its own. A second conversion in the same process was also much slower than the first. So the failure is random, and it gets likelier the longer one process converts.
+
+**Options considered:**
+- Retry whole reports: a 25+ minute conversion that fails at random wastes the most time per failure, and RBC never completed.
+- Upgrade torch/Docling: not possible on Intel Mac (no newer wheels; see the 2026-10-08 entry).
+- Convert short page slices, each in a fresh subprocess with a timeout and retries, then merge them.
+
+**Decision:** In table mode, `convert_pdf` splits the PDF into 20-page slices (`TABLE_SLICE_PAGES`). Each slice runs in a fresh Python process (`python -m reportlens.ingest.parse`) with a 10-minute timeout (`SLICE_TIMEOUT_S`) and up to 3 attempts (`SLICE_ATTEMPTS`). The slices are merged with `DoclingDocument.concatenate`, which keeps the original page numbers (checked on BCE 2024 pages 1–6: same pages and the same 42 blocks as the two slices). The ingest process itself no longer runs Docling, so embedding and table parsing never share a process. Light mode is unchanged.
+
+**Eval evidence:** none (robustness only). Cost: about one model load per slice (~15 s × 12 slices per report).

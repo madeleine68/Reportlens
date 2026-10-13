@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     llm_price_input_per_mtok: float = 0.0
     llm_price_output_per_mtok: float = 0.0
 
+    # Parsing: run Docling's table-structure model (TableFormer) so tables keep their rows and
+    # columns. Slow on CPU (~4.6 s per table); table parses get their own cache files.
+    parse_tables: bool = False
+
     # Embeddings and chunking. bge-small reads at most 512 tokens, so chunks stay well under
     # that to leave room for the Phase 2 context prefix.
     embedding_model: str = "BAAI/bge-small-en-v1.5"
@@ -42,9 +46,10 @@ class Settings(BaseSettings):
     embedding_query_prefix: str = "Represent this sentence for searching relevant passages: "
     chunk_tokens: int = 450
     chunk_overlap: int = 50
-    # "naive" (Phase 1 fixed windows) or "contextual" (Phase 2 section-aware, with a label).
+    # "naive" (Phase 1 fixed windows), "contextual" (Phase 2 section-aware, with a label) or
+    # "tables" (Phase 3: naive windows for text, one chunk per table with its header row kept).
     # Keep each strategy in its own database (POSTGRES_DB) to compare them without re-embedding.
-    chunking: Literal["naive", "contextual"] = "naive"
+    chunking: Literal["naive", "contextual", "tables"] = "naive"
     chunk_min_tokens: int = 100  # contextual: a heading starts a new chunk only after this many
     context_reserve_tokens: int = 40  # contextual: tokens kept free for the label
 

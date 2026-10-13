@@ -4,6 +4,8 @@
   `chunk_tokens` tokens, ignoring structure. Chunks may start mid-paragraph or straddle sections.
 - Contextual (Phase 2): chunks start at headings and never cut a block, and each carries a short
   label (company, year, section, pages) that is embedded with it.
+- Tables (Phase 3): text gets the naive windows, and each table becomes its own chunk. A table
+  too big for one chunk is split between rows, and every piece repeats the header row.
 
 `chunk()` picks one based on the CHUNKING setting.
 """
@@ -197,8 +199,77 @@ def chunk_contextual(
     return chunks
 
 
+# --- Table-aware chunking (Phase 3) -----------------------------------------------------------
+
+
+def split_table_header(markdown: str) -> tuple[str, str]:
+    """(header, body) of a Markdown table: the header ends at the '| --- |' divider row.
+
+    Tables without a divider (light-mode parses) have no header, so all lines are body.
+    """
+    lines = markdown.split("\n")
+    for i, line in enumerate(lines):
+        if line.startswith("| ---"):
+            return "\n".join(lines[: i + 1]), "\n".join(lines[i + 1 :])
+    return "", markdown
+
+
+def table_pieces(block: ParsedBlock, tokenize: Tokenizer, budget: int) -> list[str]:
+    """A table's text in pieces of at most `budget` tokens, each starting with the section
+    heading and the header row, so every number keeps its row and column labels.
+
+    Falls back to plain line splits when the heading and header leave less than half the budget.
+    """
+    title = f"{block.section}\n" if block.section else ""
+    header, body = split_table_header(block.text)
+    prefix = title + (f"{header}\n" if header else "")
+    prefix_tokens = len(tokenize(prefix))
+    if prefix_tokens + len(tokenize(body)) <= budget:
+        return [prefix + body]
+    if prefix_tokens > budget // 2:
+        return [p.text for p in _split_oversized(block, tokenize, budget)]
+    rows = block.model_copy(update={"text": body})
+    return [prefix + p.text for p in _split_oversized(rows, tokenize, budget - prefix_tokens)]
+
+
+def chunk_tables(
+    doc: ParsedDocument,
+    tokenize: Tokenizer | None = None,
+    chunk_tokens: int | None = None,
+    overlap: int | None = None,
+) -> list[Chunk]:
+    """Naive windows over the report's text, plus one or more chunks per table."""
+    tokenize = tokenize or embedding_tokenizer()
+    chunk_tokens = chunk_tokens or get_settings().chunk_tokens
+
+    text_doc = doc.model_copy(update={"blocks": [b for b in doc.blocks if b.block_type != "table"]})
+    texts = chunk_document(text_doc, tokenize, chunk_tokens, overlap)
+    tables = [
+        (block, piece)
+        for block in doc.blocks
+        if block.block_type == "table"
+        for piece in table_pieces(block, tokenize, chunk_tokens)
+    ]
+    table_chunks = [
+        Chunk(
+            chunk_id=f"{doc.company}-{doc.year}-{len(texts) + i:05d}",
+            company=doc.company,
+            year=doc.year,
+            text=piece,
+            pages=[block.page],
+            section=block.section,
+            num_tokens=len(tokenize(piece)),
+        )
+        for i, (block, piece) in enumerate(tables)
+    ]
+    return texts + table_chunks
+
+
 def chunk(doc: ParsedDocument) -> list[Chunk]:
     """Chunk a report with the strategy chosen by the CHUNKING setting."""
-    if get_settings().chunking == "contextual":
+    strategy = get_settings().chunking
+    if strategy == "contextual":
         return chunk_contextual(doc)
+    if strategy == "tables":
+        return chunk_tables(doc)
     return chunk_document(doc)

@@ -29,8 +29,10 @@ def ingest_config(doc: ParsedDocument) -> str:
         f"chunk={s.chunk_tokens}/{s.chunk_overlap};model={s.embedding_model}"
     )
     # Naive keeps its original fingerprint, so already-loaded naive reports aren't re-embedded.
-    if s.chunking != "naive":
+    if s.chunking == "contextual":
         config += f";chunking={s.chunking}/{s.chunk_min_tokens}/{s.context_reserve_tokens}"
+    elif s.chunking == "tables":
+        config += ";chunking=tables"
     return config
 
 

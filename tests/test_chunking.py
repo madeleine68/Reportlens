@@ -6,8 +6,11 @@ from reportlens.ingest.chunking import (
     chunk,
     chunk_contextual,
     chunk_document,
+    chunk_tables,
     context_label,
     embedding_tokenizer,
+    split_table_header,
+    table_pieces,
 )
 from reportlens.ingest.models import ParsedBlock, ParsedDocument
 
@@ -213,11 +216,12 @@ def test_chunk_picks_strategy_from_settings(monkeypatch: pytest.MonkeyPatch) -> 
     seen: list[str] = []
     monkeypatch.setattr(chunking, "chunk_document", lambda doc: seen.append("naive"))
     monkeypatch.setattr(chunking, "chunk_contextual", lambda doc: seen.append("contextual"))
-    for strategy in ("naive", "contextual"):
+    monkeypatch.setattr(chunking, "chunk_tables", lambda doc: seen.append("tables"))
+    for strategy in ("naive", "contextual", "tables"):
         monkeypatch.setenv("CHUNKING", strategy)
         get_settings.cache_clear()
         chunk(_doc(("a", 1, "S")))
-    assert seen == ["naive", "contextual"]
+    assert seen == ["naive", "contextual", "tables"]
 
 
 @pytest.mark.slow
@@ -230,3 +234,66 @@ def test_contextual_label_and_text_fit_the_embedding_model() -> None:
 
     assert len(chunks) > 1
     assert all(len(embedding_tokenizer()(c.embedding_text())) <= 510 for c in chunks)
+
+
+# --- Table-aware chunking ---------------------------------------------------------------------
+
+TABLE = "\n".join(
+    [
+        "| ($ millions) | 2023 | 2022 |",
+        "| --- | --- | --- |",
+        "| Net income | 7,528 | 10,174 |",
+        "| NCI | 118 | 258 |",
+        "| Equity holders | 7,410 | 9,916 |",
+    ]
+)
+
+
+def test_split_table_header_ends_at_the_divider_row() -> None:
+    header, body = split_table_header(TABLE)
+    assert header == "| ($ millions) | 2023 | 2022 |\n| --- | --- | --- |"
+    assert body.splitlines()[0] == "| Net income | 7,528 | 10,174 |"
+
+
+def test_table_without_divider_has_no_header() -> None:
+    assert split_table_header("Revenue 10 9\nEPS 1 2") == ("", "Revenue 10 9\nEPS 1 2")
+
+
+def test_small_table_is_one_piece_with_its_section_heading() -> None:
+    block = ParsedBlock(text=TABLE, page=22, section="T3 Financial results", block_type="table")
+    assert table_pieces(block, words, budget=100) == [f"T3 Financial results\n{TABLE}"]
+
+
+def test_split_table_repeats_heading_and_header_in_every_piece() -> None:
+    block = ParsedBlock(text=TABLE, page=22, section="Results", block_type="table")
+    # Prefix ("Results" + header) is 16 words, leaving 16 for rows of 8, 7 and 8 words.
+    pieces = table_pieces(block, words, budget=32)
+
+    assert len(pieces) == 2
+    header = "Results\n| ($ millions) | 2023 | 2022 |\n| --- | --- | --- |"
+    assert all(p.startswith(header + "\n| ") for p in pieces)
+    assert [p.splitlines()[-1] for p in pieces] == TABLE.splitlines()[3:]
+    assert all(len(words(p)) <= 32 for p in pieces)
+
+
+def test_header_too_big_to_repeat_falls_back_to_line_splits() -> None:
+    block = ParsedBlock(text=TABLE, page=22, section="Results", block_type="table")
+    pieces = table_pieces(block, words, budget=30)  # prefix (16) > half the budget
+    assert "\n".join(pieces) == TABLE
+
+
+def test_chunk_tables_keeps_text_windows_and_adds_one_chunk_per_table() -> None:
+    doc = _blocks_doc(
+        ("intro words here", 1, "Intro", "text"),
+        (TABLE, 22, "Results", "table"),
+        ("closing words", 23, "Outlook", "text"),
+    )
+    chunks = chunk_tables(doc, tokenize=words, chunk_tokens=100, overlap=0)
+
+    assert [c.chunk_id for c in chunks] == ["bce-2024-00000", "bce-2024-00001"]
+    text_chunk, table_chunk = chunks
+    assert "|" not in text_chunk.text  # the table isn't repeated inside the text windows
+    assert text_chunk.text == "intro words here\n\nclosing words"
+    assert table_chunk.text == f"Results\n{TABLE}"
+    assert table_chunk.pages == [22] and table_chunk.section == "Results"
+    assert table_chunk.num_tokens == len(words(table_chunk.text))

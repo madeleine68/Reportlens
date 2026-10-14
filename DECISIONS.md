@@ -209,3 +209,28 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** In table mode, `convert_pdf` splits the PDF into 20-page slices (`TABLE_SLICE_PAGES`). Each slice runs in a fresh Python process (`python -m reportlens.ingest.parse`) with a 10-minute timeout (`SLICE_TIMEOUT_S`) and up to 3 attempts (`SLICE_ATTEMPTS`). The slices are merged with `DoclingDocument.concatenate`, which keeps the original page numbers (checked on BCE 2024 pages 1–6: same pages and the same 42 blocks as the two slices). The ingest process itself no longer runs Docling, so embedding and table parsing never share a process. Light mode is unchanged.
 
 **Eval evidence:** none (robustness only). Cost: about one model load per slice (~15 s × 12 slices per report).
+
+## 2026-10-13 — Table chunks measured; naive chunks stay the text-search default
+
+**Context:** With all 12 reports parsed in table mode (`PARSE_TABLES=true CHUNKING=tables`, database `reportlens_tables`: 8,258 chunks, 3,943 of them tables), the Phase 2 stack (filters + hybrid + rerank) was run on table chunks and compared with the same stack on naive chunks.
+
+**Options considered:**
+- Switch the main stack to table chunks.
+- Keep naive chunks for text search, and use the table parses as the source for the `financials` table and the SQL tool.
+
+**Decision:** Keep naive chunks as the default for text search. Use the table parses (`data/parsed/*/{year}.tables.json`) to build the `financials` table next.
+
+**Eval evidence (n=42):**
+
+| Stack | Recall@5 | MRR | Correctness | Faithfulness | p50 latency |
+|-------|----------|-----|-------------|--------------|-------------|
+| Naive chunks (2026-10-10) | 0.85 | 0.60 | 0.74 | 1.00 | 7.7s |
+| Table chunks | 0.81 | 0.55 | 0.70 | 0.92 | 14.9s |
+
+- **Tables fixed the label problem they were meant to fix:** q013, q014, q015 went from wrong to right, and q006 from partly to fully right (+3.5). With naive chunks the model had picked the wrong row (an adjusted or segment figure); the table chunk gave it the right row.
+- **Losses (about −5):** q008 and q040 lost the right page in retrieval and were refused; q012 was refused even though the right page was retrieved; q021 used a Q4 column instead of the full year; q004 and q024 dropped to partly right because they left out details.
+- **Tables are under-retrieved:** they are 48% of chunks but only about 20% of the distinct chunks retrieved (31 of 159). Untested hypothesis: Markdown pipes and grids embed poorly. One fix to test: embed a plain-text version of each table but show the Markdown when answering.
+- **q001 is still wrong, now for a new reason:** the model cited T21 *Canadian Banking financial performance* and reported that segment's $4,019 million, not the bank's $7,410 million. The table was intact, but the model ignored that it covers one segment. That's a case for the `financials` table, where segment and total are separate columns, not something the model must infer.
+- **Part of the faithfulness drop is the judge's error:** in q023 the cited chunk says "our team consisted of 40,390 employees", yet the judge marked "BCE had 40,390 employees" as unsupported. q004 and q039 were not checked.
+
+**Cost:** table-mode parsing took about 35–45 min per report on this CPU (vs ~7 min in light mode); one full answer-level run (~113k answer-model tokens, most of a day's free-tier quota).

@@ -127,7 +127,7 @@ Keep this section up to date when commands change.
 
 ### Phase 3: Structured data
 
-- [ ] Tables preserved as structured data; charts summarized by a multimodal LLM
+- [ ] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts not started; see DECISIONS.md 2026-10-13)
 - [ ] `financials` table: `(company, year, metric, value, unit, source_page)`
 - [ ] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit
 - [ ] Neo4j graph: Company, Segment, Subsidiary, Executive nodes and their relationships

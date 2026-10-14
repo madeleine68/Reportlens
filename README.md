@@ -30,11 +30,11 @@ uv run python scripts/ask.py "How many wireless subscribers did Bell have in 202
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
-| 3. Structured data | Real tables, SQL tool, knowledge graph | ⬜ Planned |
+| 3. Structured data | Real tables, SQL tool, knowledge graph | 🟡 In progress: tables parsed and measured |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
 | 5. Ship | API, UI, deployment | ⬜ Planned |
 
-**Corpus so far:** 12 of 20 reports ingested (BCE, RBC and Scotiabank, fiscal 2021–2024). TD and Shopify are downloaded but not yet ingested.
+**Corpus so far:** 12 of 20 reports ingested (also parsed with tables) (BCE, RBC and Scotiabank, fiscal 2021–2024). TD and Shopify are downloaded but not yet ingested.
 
 ## Results so far
 
@@ -80,6 +80,15 @@ The label puts the company and year into every embedding, so vector search can t
 | Hybrid + rerank | **0.85** | 0.76 |
 
 Filters already supply the company and year that the label added, so most of contextual chunking's advantage disappears. And recall is scored by page: a naive chunk often spans 2–3 pages, so five naive hits cover more pages than five shorter contextual ones. The final Phase 2 stack therefore uses naive chunks. Larger contextual chunks might close the gap; that's left as an open question rather than tuned on 42 questions.
+
+**Table chunks result (Phase 3):** with Docling's table model on, each table becomes its own chunk with its header row, so numbers keep their row and column labels. On the same stack:
+
+| Phase 2 stack | Recall@5 | MRR | Correctness | Faithfulness |
+|---------------|----------|-----|-------------|--------------|
+| Naive chunks | **0.85** | **0.60** | **0.74** | **1.00** |
+| Table chunks | 0.81 | 0.55 | 0.70 | 0.92 |
+
+Tables fixed the questions where the model had picked the wrong row (3.5 questions gained, e.g. Scotiabank's *reported* rather than *adjusted* net income), but lost about 5 elsewhere: some right pages were no longer retrieved, and in one answer the model used a quarterly column instead of the full year. Tables are 48% of chunks but only about 20% of what search retrieves. So naive chunks stay the default for text search, and the parsed tables feed the `financials` table next, where "segment vs total" and "reported vs adjusted" become explicit columns instead of something the model must infer.
 
 **Where the Phase 2 stack still fails** (10 of 42 questions wrong, 2 partly right): mostly numbers whose right page *was* retrieved but whose label got lost, such as an *adjusted* figure reported instead of the *reported* one (Phase 3: tables), and comparisons that need two reports at once (Phase 4: agentic layer).
 
@@ -190,7 +199,7 @@ flowchart LR
 - **Hybrid merge (RRF)** (`retrieval/hybrid.py`): takes the top 20 from vector search and the top 20 from keyword search, and scores each chunk by adding `1 / (60 + rank)` for every list it appears in. Only the ranks count, not the raw scores, which are on different scales. Chunks both retrievers like rise to the top. Use it with `RETRIEVAL_MODE=hybrid`.
 - **Rerank** (`retrieval/rerank.py`): the retriever fetches 40 candidates, and a cross-encoder (`ms-marco-MiniLM-L-6-v2`) reads the question and each candidate *together* and scores how well the candidate answers it. The best 5 are kept. That's slower (about 3 s per question on a laptop CPU) but much more accurate than the retrievers, which look at the question and chunks separately. Turn it on with `RETRIEVAL_RERANK=true`; it works on top of any retrieval mode.
 
-### Phase 3: Structured data ⬜
+### Phase 3: Structured data 🟡
 
 Many questions are about numbers in tables, which plain text search handles poorly. This phase adds two structured sources next to the vector search.
 
@@ -206,10 +215,12 @@ flowchart LR
     cypher --> kg
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
-    class pdf,parse,text,fin,kg,q,sqltool,cypher planned
+    classDef done fill:#d4edda,stroke:#28a745,color:#155724
+    class pdf,parse,text done
+    class fin,kg,q,sqltool,cypher planned
 ```
 
-- **Tables with structure:** Docling's table model is turned on, so each number keeps its row and column labels.
+- **Tables with structure** (`PARSE_TABLES=true`, `CHUNKING=tables`): Docling's table model is turned on, so each number keeps its row and column labels. Each table becomes its own chunk, starting with its section heading and header row; a table too big for one chunk is split between rows and every piece repeats the header. The table model crashes at random on this laptop's CPU, so each report is converted in 20-page slices, each in a fresh process with a timeout and up to 3 attempts (about 35–45 min per report). Table chunks live in their own database (`reportlens_tables`); measured above, they aren't the default.
 - **`financials` table:** key figures go into a normal SQL table, so "net income for all banks in 2023" becomes a simple query.
 - **Text-to-SQL:** the LLM writes the SQL, but it runs with a read-only database user, on approved tables only, with a timeout and a row limit.
 - **Knowledge graph:** relationships such as "which subsidiaries belong to which segment" are stored in Neo4j and queried with Cypher.

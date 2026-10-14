@@ -61,7 +61,7 @@ reportlens/
 │   ├── core/             # config.py (pydantic-settings), llm.py, db.py, logging.py
 │   ├── ingest/           # parse.py, chunking.py, embed.py, load.py, tables.py, metrics.py, financials.py, figures.py
 │   ├── retrieval/        # vector.py, keyword.py, hybrid.py, rerank.py, filters.py
-│   ├── sources/          # sql_tool.py, graph_tool.py, web_tool.py
+│   ├── sources/          # sql_tool.py, sql_safety.py, graph_tool.py, web_tool.py
 │   ├── agents/           # graph.py, router.py, self_rag.py, corrective.py
 │   ├── generation/       # answer.py (answers with page citations), prompts.py
 │   ├── evals/            # questions.py, metrics.py, judge.py, runner.py (eval logic)
@@ -86,6 +86,7 @@ PARSE_TABLES=true CHUNKING=tables POSTGRES_DB=reportlens_tables uv run python sc
 uv run python scripts/load_tables.py                 # Phase 3: table numbers -> table_cells -> financials (needs table parses)
 uv run python scripts/check_financials.py            # financials vs the eval set's expected numbers
 uv run python scripts/ask.py "What was RBC's net income in 2023?"   # ask one question
+uv run python scripts/ask.py --sql "What was RBC's net income in 2023?"   # Phase 3: answer via the SQL tool
 uv run python evals/run_evals.py --name "baseline"   # run evals, append to results.md
 uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.jsonl  # runner smoke test
 uv run python evals/run_evals.py --name "x" --retrieval-only    # recall/MRR only, no answer model (cheap)
@@ -131,7 +132,7 @@ Keep this section up to date when commands change.
 
 - [ ] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts not started; see DECISIONS.md 2026-10-13)
 - [x] `financials` table: `(company, year, metric, value, unit, source_page)` (plus report_year, scope, basis; 12 metrics from `table_cells` by rules + vote; 29/33 eval figures found; see DECISIONS.md 2026-10-14)
-- [ ] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit
+- [x] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit (`sources/sql_tool.py` + `sql_safety.py` with sqlglot; not yet evaluated, see DECISIONS.md 2026-10-14)
 - [ ] Neo4j graph: Company, Segment, Subsidiary, Executive nodes and their relationships
 - [ ] Cypher query tool
 - [ ] Add numeric and relationship questions to evals (**human adds them**)

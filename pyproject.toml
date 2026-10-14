@@ -16,6 +16,7 @@ dependencies = [
     "numpy<2",
     "sentence-transformers>=5.7.0",
     "pgvector>=0.5.1",
+    "sqlglot>=25",
 ]
 
 [dependency-groups]

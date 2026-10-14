@@ -18,7 +18,7 @@ Retriever = Callable[[psycopg.Connection, str], list[RetrievedChunk]]
 Chat = Callable[..., llm.LLMResponse]
 
 # Matches [1] and grouped markers like [1, 3].
-_MARKER = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
+CITATION_MARKER = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
 # gpt-oss sometimes writes markers as 【1】 or [1†L13-L16] (its browsing-tool style).
 _FULL_WIDTH_BRACKETS = str.maketrans({"\u3010": "[", "\u3011": "]"})
 _DAGGER_SUFFIX = re.compile(r"\[(\d+)\u2020[^\]]*\]")
@@ -83,7 +83,7 @@ def parse_citations(text: str, chunks: list[RetrievedChunk]) -> list[Citation]:
     """Turn [n] markers into citations in order of first use, dropping markers with no source."""
     citations: list[Citation] = []
     seen: set[int] = set()
-    for match in _MARKER.finditer(text):
+    for match in CITATION_MARKER.finditer(text):
         for number in (int(n) for n in match.group(1).split(",")):
             if number in seen:
                 continue

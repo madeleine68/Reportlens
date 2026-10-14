@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     rerank_candidates: int = 40
 
+    # Phase 3 SQL tool: LLM-written SQL runs as this read-only role, which core/db.py creates
+    # with SELECT on the approved tables only. Every query gets a timeout and a row limit.
+    sql_reader_user: str = "reportlens_reader"
+    sql_reader_password: SecretStr = SecretStr("reportlens_reader")
+    sql_timeout_ms: int = 5000
+    sql_row_limit: int = 50
+
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"
 
@@ -92,6 +99,14 @@ class Settings(BaseSettings):
         """Postgres connection string for psycopg."""
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password.get_secret_value()}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def reader_database_url(self) -> str:
+        """Connection string for the read-only role the SQL tool uses."""
+        return (
+            f"postgresql://{self.sql_reader_user}:{self.sql_reader_password.get_secret_value()}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 

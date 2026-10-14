@@ -265,3 +265,21 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 Fixes to `table_cells` found while checking (re-extracted, no re-parse): footnote markers are stripped from labels (`CET1 ratio (3)`, LaTeX superscripts); leading body rows of words or years are merged into the column headers, because Docling sometimes takes a title row as the header (this dropped cells with no period year from 18% to 14%); a scale named in the row label (`Number of employees (thousands)`) is used. Counts take a scale only from their own row, so a segment table's "($ millions)" no longer turns 2,788 employees into 2.8 billion.
 
 **Eval evidence:** `scripts/check_financials.py` looks up every number in the expected answers of the 33 numeric, trend and comparison questions: **29/33** have a matching total-scope row, including q001's reported 7,410 (not the segment's 4,019) and both restated figures. The 4 misses are expected: q022/q039 expect an 83.9% change (derivable from stored net earnings, 375 vs 2,327), and q023/q040 expect BCE's 40,390 employees, which the tables print only as 40 thousand (40,390 is in the text). Of 671 rows, 187 saw more than one candidate value and 317 rest on a single cell, so low-agreement rows deserve a look before trusting them.
+
+## 2026-10-14 — Text-to-SQL tool: three safety layers, one retry, answers cite table rows
+
+**Context:** Step 3 of the SQL plan. An LLM writes SQL from the question, so the SQL must be treated as untrusted: it must never write, read other tables, or run for long.
+
+**Options considered:**
+- Trust a read-only role alone: simple, but a mistake in grants would be the only barrier, and the LLM gets no useful feedback on what it did wrong.
+- Validate with regexes: easy to fool (comments, CTEs, nested queries).
+- Parse with `sqlglot` and check the syntax tree, *and* run as a read-only role: two independent barriers, with clear rejection messages to feed back to the LLM.
+
+**Decision:** Three layers.
+1. **`sources/sql_safety.py`** parses the SQL with `sqlglot` (new dependency) and rejects anything but exactly one SELECT (or WITH/UNION of SELECTs) that reads only `financials` and `table_cells` (CTE names allowed, schema-qualified names rejected). It also rejects SELECT INTO, FOR UPDATE, and functions that reach outside the query (`pg_*`, `lo_*`, `dblink`, `set_config`, `current_setting`, `query_to_*`). A LIMIT of at most `SQL_ROW_LIMIT` (50) is enforced.
+2. **A read-only role** (`reportlens_reader`, created by `core/db.py` on connect) has SELECT on those two tables only, `default_transaction_read_only = on` and a `statement_timeout`. Checked live: DELETE, CREATE TABLE and reading `chunks` all fail; `pg_sleep(6)` is cancelled at 5 s.
+3. **`connect_reader()`** opens a read-only, non-autocommit session with the same timeout, and rolls back after every query.
+
+The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is rejected or Postgres raises an error, the error message goes back for **one** retry. An empty SQL string means the tables can't answer (e.g. "why" questions), so no query runs. The main model answers from the rows, numbered `[n]` as column=value pairs, and each citation maps to the row's company, report and page. No rows means the fixed not-found reply, with no main-model call.
+
+**Eval evidence:** none yet (Step 4). In manual tests the first prompt let the SQL model skip the `scope`/`basis` filters, and the answer model then reported Scotiabank's Canadian Banking segment (4,022) as the bank's net income: q001's original failure again. The prompt now requires those filters (defaulting to `total` / `reported`) and the label columns (`metric`, `scope`, `basis`, `unit`, or the table and row labels for `table_cells`) in every SELECT. After that change: q001 gives 7,410 (page 22), BCE capex 2022→2024 gives 5,133 → 3,897, the 2024 CET1 comparison gives RBC 13.2% vs Scotiabank 13.1%, and RBC's 2023 provision for credit losses (not a curated metric) comes from `table_cells`: 2,468 million.

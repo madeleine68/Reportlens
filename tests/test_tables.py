@@ -6,8 +6,10 @@ from reportlens.ingest.tables import (
     cell_unit,
     cells_from_document,
     cells_from_table,
+    clean_label,
     detect_period,
     load_table_cells,
+    merge_header_rows,
     parse_value,
     scale_unit,
 )
@@ -53,6 +55,26 @@ def test_parse_value_rejects_non_numbers(text: str) -> None:
     assert parse_value(text) is None
 
 
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        ("CET1 ratio (3)", "CET1 ratio"),
+        ("Return on common equity (6), (7)", "Return on common equity"),
+        (
+            "Diluted earnings per share (in dollars) (Note 22)",
+            "Diluted earnings per share (in dollars)",
+        ),
+        ("Mobile phone subscribers$^{ }$^{(}$^{1}$^{)}", "Mobile phone subscribers"),
+        ("Number of employees (FTE) (2)", "Number of employees (FTE)"),
+        ("Effective tax rate (%)", "Effective tax rate (%)"),
+        ("Internal ratings map*", "Internal ratings map"),
+        ("Total  revenue\n", "Total revenue"),
+    ],
+)
+def test_clean_label_drops_footnote_markers_only(label: str, expected: str) -> None:
+    assert clean_label(label) == expected
+
+
 def test_scale_unit_finds_millions_billions_thousands() -> None:
     assert scale_unit("(Millions of Canadian dollars)") == "millions"
     assert scale_unit("As at October 31 ($ billions)") == "billions"
@@ -79,6 +101,7 @@ def test_cell_unit_prefers_cell_then_row_then_column_then_table() -> None:
     assert cell_unit("percent", "Net income", "2023", "millions") == "percent"
     assert cell_unit(None, "Diluted earnings per share ($)", "2023", "millions") == "dollars"
     assert cell_unit(None, "Effective tax rate (%)", "2023", "millions") == "percent"
+    assert cell_unit(None, "Number of employees (thousands)", "2024", None) == "thousands"
     assert cell_unit(None, "Net income", "2023 ($ billions)", "millions") == "billions"
     assert cell_unit(None, "Net income", "2023", "millions") == "millions"
 
@@ -121,6 +144,34 @@ def test_columns_without_a_year_take_the_tables_year() -> None:
         ("Canadian Banking", 2023, "year"),
         ("Total", 2023, "year"),
     ]
+
+
+def test_title_row_taken_as_header_is_extended_by_the_real_header_row() -> None:
+    table = "\n".join(
+        [
+            "| Selected highlights |  |  | 2024 vs. 2023 |",
+            "| --- | --- | --- | --- |",
+            "| (Millions of Canadian dollars) | 2024 (1) | 2023 (2) | Increase (decrease) |",
+            "| Total revenue | $ 57,344 | $ 51,464 | $ 5,880 |",
+        ]
+    )
+    cells = cells_from_table(_block(table), "rbc", 2024, "t")
+    assert [(c.column_label, c.period_year, c.period_kind, c.unit) for c in cells] == [
+        ("2024", 2024, "year", "millions"),
+        ("2023", 2023, "year", "millions"),
+        ("2024 vs. 2023 - Increase (decrease)", 2024, "change", "millions"),
+    ]
+    assert cells[0].row_index == 1  # row indexes still count the merged header row
+
+
+def test_merge_header_rows_stops_at_the_first_row_of_figures() -> None:
+    rows = [["", "2024", "2023"], ["Net income", "16,240", "14,866"]]
+    assert merge_header_rows(["($ millions)", "", ""], rows) == (
+        ["($ millions)", "2024", "2023"],
+        1,
+    )
+    assert merge_header_rows(["x", "2024"], [["Net income", "16,240"]]) == (["x", "2024"], 0)
+    assert merge_header_rows(["x", "2024"], [["Reported Results", ""]]) == (["x", "2024"], 0)
 
 
 def test_table_without_a_header_row_gives_no_cells() -> None:

@@ -1,4 +1,4 @@
-"""Load every numeric table cell into the table_cells table (Phase 3), from cached table parses.
+"""Load every numeric table cell into table_cells, then rebuild financials from them (Phase 3).
 
 Needs the table-mode parses (data/parsed/{company}/{year}.tables.json); make them with
 `PARSE_TABLES=true uv run python scripts/ingest_all.py`. Rules only, no LLM: takes seconds.
@@ -13,6 +13,7 @@ import sys
 from reportlens.core.config import get_settings
 from reportlens.core.db import connect
 from reportlens.core.logging import setup_logging
+from reportlens.ingest.financials import build_financials, load_financials, read_cells
 from reportlens.ingest.models import ParsedDocument
 from reportlens.ingest.tables import cells_from_document, load_table_cells
 
@@ -41,6 +42,9 @@ def main() -> int:
             cells = cells_from_document(doc)
             load_table_cells(conn, doc.company, doc.year, cells)
             print(f"{doc.company}/{doc.year}: {len(cells)} cells", flush=True)
+        financials = build_financials(read_cells(conn))
+        load_financials(conn, financials)
+        print(f"financials: {len(financials)} rows")
     return 0
 
 

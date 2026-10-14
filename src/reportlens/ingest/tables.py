@@ -28,6 +28,16 @@ _PER_SHARE = re.compile(r"per (common )?share|\bEPS\b|\bdividends? declared per\
 _YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
 _QUARTER = re.compile(r"three months|quarter|\bQ[1-4]\b", re.IGNORECASE)
 _CHANGE = re.compile(r"change|\bvs\.?\b|increase|decrease", re.IGNORECASE)
+# Footnote markers: LaTeX-style superscripts from the parser, and trailing "(2)", "(6), (7)",
+# "(Note 22)" or "*". Labels such as "(%)", "(in dollars)" or "(FTE)" are kept.
+_SUPERSCRIPT = re.compile(r"(?:\$?\^\{[^}]*\})+\$?")
+_TRAILING_NOTES = re.compile(r"(?:\s*,?\s*(?:\((?:\d{1,2}|note \d+)\)|\*+))+\s*$", re.IGNORECASE)
+
+
+def clean_label(label: str) -> str:
+    """A row or column label without footnote markers, on one line of single spaces."""
+    label = _TRAILING_NOTES.sub("", _SUPERSCRIPT.sub("", label))
+    return " ".join(label.split())
 
 
 def split_row(line: str) -> list[str]:
@@ -75,14 +85,45 @@ def detect_period(label: str) -> tuple[int | None, PeriodKind]:
 def cell_unit(
     cell: str | None, row_label: str, column_label: str, table_scale: str | None
 ) -> str | None:
-    """A cell's unit: its own %/bps, else per-share dollars, else the column or table scale."""
+    """A cell's unit: its own %/bps, else per-share dollars, else the row, column or table scale."""
     if cell:
         return cell
     if _PER_SHARE.search(row_label):
         return "dollars"
     if "(%)" in row_label or row_label.rstrip().endswith("%"):
         return "percent"
-    return scale_unit(column_label) or table_scale
+    return scale_unit(row_label) or scale_unit(column_label) or table_scale
+
+
+def _is_header_text(cell: str) -> bool:
+    """True for a header-like cell: words or a bare year, not a figure."""
+    label = clean_label(cell)
+    return parse_value(label) is None or bool(_YEAR.fullmatch(label))
+
+
+def merge_header_rows(columns: list[str], rows: list[list[str]]) -> tuple[list[str], int]:
+    """(column labels, header rows used): leading body rows that hold only words or years are
+    more header (Docling sometimes takes a title row as the header), so they extend the labels.
+    """
+    used = 0
+    for row in rows:
+        values = [cell for cell in row[1:] if cell]
+        if not values or not all(_is_header_text(cell) for cell in values):
+            break
+        width = max(len(columns), len(row))
+        columns = [
+            " - ".join(
+                part
+                for part in (
+                    columns[i] if i < len(columns) else "",
+                    clean_label(row[i]) if i < len(row) else "",
+                )
+                if part
+            )
+            for i in range(width)
+        ]
+        used += 1
+    return columns, used
 
 
 def cells_from_table(
@@ -92,16 +133,19 @@ def cells_from_table(
     header, body = split_table_header(block.text)
     if not header:
         return []  # no column labels to attach (a table the table model didn't structure)
-    columns = split_row(header.split("\n")[0])
+    rows = [split_row(line) for line in body.split("\n")]
+    columns = [clean_label(c) for c in split_row(header.split("\n")[0])]
+    columns, header_rows = merge_header_rows(columns, rows)
     title = " ".join((block.section or "").split())
     table_scale = scale_unit(columns[0]) or scale_unit(title)
     table_year, _ = detect_period(f"{columns[0]} {title}")
 
     cells = []
     row_group = ""
-    for row_index, line in enumerate(body.split("\n")):
-        row = split_row(line)
-        row_label = " ".join(row[0].split())
+    for row_index, row in enumerate(rows):
+        if row_index < header_rows:
+            continue
+        row_label = clean_label(row[0])
         if row_label and not any(row[1:]):
             row_group = row_label  # a label-only row heads the rows below it
             continue

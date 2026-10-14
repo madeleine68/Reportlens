@@ -62,3 +62,21 @@ CREATE TABLE IF NOT EXISTS table_cells (
 );
 
 CREATE INDEX IF NOT EXISTS table_cells_company_year ON table_cells (company, report_year);
+
+-- Phase 3: a few headline metrics picked from table_cells by ingest/financials.py.
+-- One row per figure per report, since a later report may restate the prior year.
+CREATE TABLE IF NOT EXISTS financials (
+    company          TEXT NOT NULL,
+    year             INTEGER NOT NULL,        -- fiscal year the figure is for
+    report_year      INTEGER NOT NULL,        -- report it was read from (year or year + 1)
+    metric           TEXT NOT NULL,           -- e.g. 'net_income', 'cet1_ratio'
+    scope            TEXT NOT NULL,           -- 'total' or a segment name
+    basis            TEXT NOT NULL,           -- 'reported' or 'adjusted'
+    value            DOUBLE PRECISION NOT NULL,
+    unit             TEXT NOT NULL,           -- millions | percent | dollars | count
+    source_page      INTEGER NOT NULL,
+    source_table     TEXT NOT NULL,
+    agreeing_cells   INTEGER NOT NULL,        -- cells that printed this value
+    candidate_values INTEGER NOT NULL,        -- distinct values seen (> 1: tables disagreed)
+    PRIMARY KEY (company, year, report_year, metric, scope, basis)
+);

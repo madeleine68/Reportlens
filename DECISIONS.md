@@ -246,3 +246,22 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 **Decision:** Rules. `ingest/tables.py` writes every numeric cell to `table_cells` (110,647 cells from 12 reports, loaded in ~13 s by `scripts/load_tables.py`). Parentheses mean negative; a lone `-` is nil, not 0. Unit comes from the cell (`%`, `bps`), then per-share row labels (`dollars`), then the column header, then the table's corner cell or title (`millions`, `billions`, `thousands`). Period year and kind (`year`, `quarter`, `change`, `unknown`) come from the column header, falling back to the corner cell or title. A row with a label but no values (e.g. "Reported Results", "Adjusted Results") becomes the `row_group` of the rows below it, so reported and adjusted figures with the same row label stay apart. `table_cells` lives in the main `reportlens` database, next to the naive chunks, and isn't tied to `documents`: it's replaced in full on every load.
 
 **Eval evidence:** none yet (Step 4). Spot checks against eval answers: Scotiabank 2023 net income attributable to equity holders is 7,410 under *Reported Results* (8,320 under *Adjusted Results*) and under the *Total* column of the segment table (4,019 under *Canadian Banking*); RBC 2024 net income 16,240; RBC 2024 CET1 ratio 13.2%; Scotiabank 2023 diluted EPS 5.78; BCE 2024 capex 3,897. Known gaps: 22% of cells have no unit (e.g. BCE's segment table states no scale) and 18% have no period year (mostly columns with an empty header).
+
+## 2026-10-14 — financials: 12 headline metrics picked from table_cells by rules and a vote
+
+**Context:** Step 2 of the SQL plan. `table_cells` has every number, but a question like "RBC's net income in 2024" matches hundreds of cells across tables (segment tables, quarterly tables, notes on subsidiaries). The SQL tool needs one clean row per figure.
+
+**Options considered:**
+- LLM picks the right cell per metric and report: costs quota and needs checking anyway.
+- Rules: each metric is a few row-label regexes and a stored unit (`ingest/metrics.py`); every matching full-year cell is a candidate; the most common value wins.
+
+**Decision:** Rules plus a vote (`ingest/financials.py`, rebuilt by `scripts/load_tables.py`). 12 metrics: net income, net income to shareholders, revenue, diluted EPS, CET1 ratio, ROE, total assets, capex, adjusted EBITDA, employees, mobile phone subscribers, dividends per share. Each row records:
+- **scope**: `total`, or a segment read from the column header (e.g. *Canadian Banking*) or the table title. Columns that are some other breakdown (e.g. *U.S.*) are skipped.
+- **basis**: `adjusted` if the row, row group or column says so, else `reported`.
+- **report_year**: a report's figures for its own year *and* the prior year are both kept, one row per report, because reports restate (Scotiabank's 2023 diluted EPS is 5.78 in the 2023 report, 5.72 in the 2024 one; q014 and q016 expect the restated figures).
+- **agreeing_cells / candidate_values**: how many cells printed the winning value, and how many distinct values were seen, as a confidence signal for the SQL tool and for review.
+- Ties go to the value printed earliest in the report, usually the highlights table.
+
+Fixes to `table_cells` found while checking (re-extracted, no re-parse): footnote markers are stripped from labels (`CET1 ratio (3)`, LaTeX superscripts); leading body rows of words or years are merged into the column headers, because Docling sometimes takes a title row as the header (this dropped cells with no period year from 18% to 14%); a scale named in the row label (`Number of employees (thousands)`) is used. Counts take a scale only from their own row, so a segment table's "($ millions)" no longer turns 2,788 employees into 2.8 billion.
+
+**Eval evidence:** `scripts/check_financials.py` looks up every number in the expected answers of the 33 numeric, trend and comparison questions: **29/33** have a matching total-scope row, including q001's reported 7,410 (not the segment's 4,019) and both restated figures. The 4 misses are expected: q022/q039 expect an 83.9% change (derivable from stored net earnings, 375 vs 2,327), and q023/q040 expect BCE's 40,390 employees, which the tables print only as 40 thousand (40,390 is in the text). Of 671 rows, 187 saw more than one candidate value and 317 rest on a single cell, so low-agreement rows deserve a look before trusting them.

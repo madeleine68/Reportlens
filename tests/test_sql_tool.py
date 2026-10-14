@@ -9,6 +9,7 @@ from reportlens.sources import sql_tool
 from reportlens.sources.sql_tool import (
     SqlQuery,
     answer_with_sql,
+    as_answer,
     format_rows,
     query_for,
     row_citations,
@@ -139,6 +140,7 @@ def test_format_rows_numbers_rows_as_column_value_pairs() -> None:
     assert format_rows(["company", "value"], [["rbc", 1.0], ["bce", 2.0]]) == (
         "[1] company=rbc, value=1.0\n[2] company=bce, value=2.0"
     )
+    assert format_rows(["title"], [["Net\nincome"]]) == "[1] title=Net income"
 
 
 def test_row_citations_need_company_report_and_page_columns() -> None:
@@ -146,3 +148,20 @@ def test_row_citations_need_company_report_and_page_columns() -> None:
     cites = row_citations("x [2][1] y [9]", ["company", "report_year", "page"], rows)
     assert [(c.number, c.company, c.page) for c in cites] == [(2, "bce", 47), (1, "rbc", 26)]
     assert row_citations("x [1]", ["company", "value"], [["rbc", 1.0]]) == []
+
+
+def test_as_answer_turns_rows_into_chunks_the_eval_runner_can_score(reader) -> None:
+    write, _ = _writer(GOOD_SQL)
+    sql_answer = answer_with_sql(reader, "q", write, _chat("RBC earned $16,240 million [1]."))
+    answer = as_answer(sql_answer)
+
+    [chunk] = answer.chunks
+    assert (chunk.chunk_id, chunk.company, chunk.year, chunk.pages) == (
+        "sql-row-1",
+        "rbc",
+        2024,
+        [26],
+    )
+    assert chunk.text.startswith("[1] company=rbc, report_year=2024, source_page=26")
+    assert [(c.chunk_id, c.pages) for c in answer.citations] == [("sql-row-1", [26])]
+    assert (answer.found, answer.input_tokens) == (True, 100)

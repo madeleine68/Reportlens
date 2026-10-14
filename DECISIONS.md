@@ -283,3 +283,26 @@ Fixes to `table_cells` found while checking (re-extracted, no re-parse): footnot
 The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is rejected or Postgres raises an error, the error message goes back for **one** retry. An empty SQL string means the tables can't answer (e.g. "why" questions), so no query runs. The main model answers from the rows, numbered `[n]` as column=value pairs, and each citation maps to the row's company, report and page. No rows means the fixed not-found reply, with no main-model call.
 
 **Eval evidence:** none yet (Step 4). In manual tests the first prompt let the SQL model skip the `scope`/`basis` filters, and the answer model then reported Scotiabank's Canadian Banking segment (4,022) as the bank's net income: q001's original failure again. The prompt now requires those filters (defaulting to `total` / `reported`) and the label columns (`metric`, `scope`, `basis`, `unit`, or the table and row labels for `table_cells`) in every SELECT. After that change: q001 gives 7,410 (page 22), BCE capex 2022→2024 gives 5,133 → 3,897, the 2024 CET1 comparison gives RBC 13.2% vs Scotiabank 13.1%, and RBC's 2023 provision for credit losses (not a curated metric) comes from `table_cells`: 2,468 million.
+
+## 2026-10-14 — SQL tool measured: better than text search on numeric questions, and the two complement each other
+
+**Context:** Step 4 of the SQL plan. `run_evals.py --source sql --types numeric,trend,comparison` answers the 33 numeric, trend and comparison questions with the SQL tool. `as_answer` turns each returned row into a pseudo-chunk (company, report, page, `column=value` text), so the runner's recall, correctness and faithfulness scoring works unchanged.
+
+**Decision:** Keep the SQL tool as a separate source for the Phase 4 router; don't merge it into text search.
+
+**Eval evidence (n=33, same questions):**
+
+| Source | Correctness | Faithfulness | Main-model tokens/question |
+|--------|-------------|--------------|----------------------------|
+| Text search (Phase 2 stack, 2026-10-10 run) | 0.67 | 1.00 | ~2,900 |
+| SQL tool | **0.79** | 0.98 | **~560** |
+| Better of the two per question (a perfect router) | 0.94 | | |
+
+- **SQL wins 11 questions,** exactly the "number with the wrong label" failures: q001 (bank total, not a segment), q013/q014/q015 (reported, not adjusted; restated prior year), q033/q034 (everyday wording), q002/q043 (comparisons across years or banks).
+- **Text wins 6:** "why" questions the SQL model rightly declines (q022, q039), BCE's headcount that the tables round to 40 thousand (q023, q040: 40,390 is only in the text), and two figures written at a precision the judge marked partly right (q004, q019).
+- **Recall (0.47) isn't comparable with text search:** the SQL tool often reads a figure from a different table than the pages listed in the eval set, so a correct answer can have recall 0.
+- q036 hit a provider JSON error and was re-run alone, as in Phase 2.
+
+**Fixed after this run:** in q028 the SQL model picked the winner in SQL (`ORDER BY value DESC LIMIT 1`), so the answer model saw only RBC and refused. The prompt now asks for one row per company and year in comparisons; q028 passes manually. A full re-run with that rule ran out of the free tier's daily fast-model tokens after 9 of 33 questions (same 0.94 as before on those 9), so it is **pending**. Because the fix came from looking at an eval result, the re-run should be read as tuned on this set.
+
+**Cost note:** the SQL tool spends mostly fast-model tokens (a ~2k-token schema prompt per question, plus the two judge calls in evals), so one 33-question SQL eval uses roughly a third of the fast model's daily quota.

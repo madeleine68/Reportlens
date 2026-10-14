@@ -56,6 +56,8 @@ metric, scope, basis, value, unit and source_page.
 - table_cells: select company, report_year, page, table_title, row_group, row_label, \
 column_label, value and unit.
 - These columns let the answer say what each number is and cite where it is printed.
+- For comparisons and trends, return one row per company and year being compared; don't pick \
+the winner in SQL (no ORDER BY ... LIMIT 1), the answer compares them.
 - Select only the rows needed; at most {row_limit} rows are returned.
 - If these tables cannot answer the question (e.g. it asks why, or about something that is not \
 a number), return an empty string as the SQL."""

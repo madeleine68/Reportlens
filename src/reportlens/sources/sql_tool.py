@@ -17,8 +17,15 @@ from reportlens.core import llm
 from reportlens.core.config import get_settings
 from reportlens.core.logging import get_logger
 from reportlens.generation import prompts
-from reportlens.generation.answer import CITATION_MARKER, is_not_found, normalize_markers
+from reportlens.generation.answer import (
+    CITATION_MARKER,
+    Answer,
+    Citation,
+    is_not_found,
+    normalize_markers,
+)
 from reportlens.ingest.metrics import METRICS, SEGMENTS
+from reportlens.retrieval.models import RetrievedChunk
 from reportlens.sources.sql_safety import UnsafeSQL, check_sql
 
 log = get_logger(__name__)
@@ -119,12 +126,15 @@ def query_for(
     return None, [], [], error
 
 
+def format_row(number: int, columns: list[str], row: list[Any]) -> str:
+    """One row as '[n] column=value, ...' on a single line (line breaks in values become spaces)."""
+    pairs = ", ".join(f"{c}={' '.join(str(v).split())}" for c, v in zip(columns, row, strict=True))
+    return f"[{number}] {pairs}"
+
+
 def format_rows(columns: list[str], rows: list[list[Any]]) -> str:
     """Rows as numbered lines of column=value pairs, the way the answer model cites them."""
-    return "\n".join(
-        f"[{i}] " + ", ".join(f"{c}={v}" for c, v in zip(columns, row, strict=True))
-        for i, row in enumerate(rows, start=1)
-    )
+    return "\n".join(format_row(i, columns, row) for i, row in enumerate(rows, start=1))
 
 
 def row_citations(text: str, columns: list[str], rows: list[list[Any]]) -> list[SqlCitation]:
@@ -198,4 +208,46 @@ def answer_with_sql(
             "output_tokens": reply.output_tokens,
             "latency_s": reply.latency_s,
         }
+    )
+
+
+def as_answer(sql_answer: SqlAnswer) -> Answer:
+    """The SQL answer in the shape the eval runner scores: each row becomes a pseudo-chunk.
+
+    A row's company, report and page let recall check it against the expected pages, and its
+    column=value text is what the faithfulness judge reads as the source.
+    """
+    index = {name: i for i, name in enumerate(sql_answer.columns)}
+    page_col = index.get("source_page", index.get("page"))
+    chunks = [
+        RetrievedChunk(
+            chunk_id=f"sql-row-{i}",
+            company=row[index["company"]] if "company" in index else "",
+            year=row[index["report_year"]] if "report_year" in index else 0,
+            section=None,
+            pages=[row[page_col]] if page_col is not None else [],
+            text=format_row(i, sql_answer.columns, row),
+            score=0.0,
+        )
+        for i, row in enumerate(sql_answer.rows, start=1)
+    ]
+    return Answer(
+        question=sql_answer.question,
+        text=sql_answer.text,
+        found=sql_answer.found,
+        citations=[
+            Citation(
+                number=c.number,
+                chunk_id=f"sql-row-{c.number}",
+                company=c.company,
+                year=c.year,
+                pages=[c.page],
+            )
+            for c in sql_answer.citations
+        ],
+        chunks=chunks,
+        model=sql_answer.model,
+        input_tokens=sql_answer.input_tokens,
+        output_tokens=sql_answer.output_tokens,
+        latency_s=sql_answer.latency_s,
     )

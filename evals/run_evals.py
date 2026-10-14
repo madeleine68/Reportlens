@@ -3,6 +3,7 @@
 Usage:
     uv run python evals/run_evals.py --name "baseline"
     uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.jsonl
+    uv run python evals/run_evals.py --name "sql tool" --source sql --types numeric,trend,comparison
 
 Per-question details go to evals/runs/{date}-{name}.jsonl. A summary row is appended to
 evals/results.md only when running the real eval set (evals/questions.jsonl).
@@ -15,16 +16,19 @@ import sys
 from pathlib import Path
 
 from reportlens.core.config import get_settings
-from reportlens.core.db import connect
+from reportlens.core.db import connect, connect_reader
 from reportlens.core.logging import setup_logging
 from reportlens.evals.questions import load_questions
 from reportlens.evals.runner import (
+    AnswerFn,
     QuestionResult,
     evaluate_question,
     evaluate_retrieval,
     results_row,
     summarize,
 )
+from reportlens.generation.answer import Answer, answer_question
+from reportlens.sources.sql_tool import answer_with_sql, as_answer
 
 EVALS_DIR = Path(__file__).resolve().parent
 REAL_QUESTIONS = EVALS_DIR / "questions.jsonl"
@@ -43,22 +47,40 @@ def main() -> int:
         action="store_true",
         help="score recall and MRR only, with no answer model or judge (cheap)",
     )
+    parser.add_argument(
+        "--source",
+        choices=["text", "sql"],
+        default="text",
+        help="answer from text search (default) or from the financial tables (Phase 3 SQL tool)",
+    )
+    parser.add_argument("--types", help="only these question types, e.g. numeric,trend")
     args = parser.parse_args()
     setup_logging(get_settings().log_level)
+    if args.source == "sql" and args.retrieval_only:
+        parser.error("--retrieval-only applies to text search only")
 
     if not args.questions.exists():
         print(f"No questions file at {args.questions}. See CLAUDE.md 'Eval set format'.")
         return 1
-    questions = load_questions(args.questions)[: args.limit]
+    questions = load_questions(args.questions)
+    if args.types:
+        wanted = {t.strip() for t in args.types.split(",")}
+        questions = [q for q in questions if q.type in wanted]
+    questions = questions[: args.limit]
 
     results: list[QuestionResult] = []
-    with connect() as conn:
+    with connect() as conn, connect_reader() as reader:
+
+        def answer_from_sql(_conn: object, question: str) -> Answer:
+            return as_answer(answer_with_sql(reader, question))  # the read-only connection
+
+        answer_fn: AnswerFn = answer_from_sql if args.source == "sql" else answer_question
         for i, q in enumerate(questions, start=1):
             try:
                 r = (
                     evaluate_retrieval(conn, q)
                     if args.retrieval_only
-                    else evaluate_question(conn, q)
+                    else evaluate_question(conn, q, answer_fn)
                 )
             except Exception as err:  # one failure (e.g. rate limit) shouldn't sink the run
                 r = QuestionResult(
@@ -83,7 +105,12 @@ def main() -> int:
     run_path.write_text("".join(r.model_dump_json() + "\n" for r in results))
 
     summary = summarize(results)
-    notes = "; ".join(filter(None, ["retrieval only" if args.retrieval_only else "", args.notes]))
+    auto = [
+        "retrieval only" if args.retrieval_only else "",
+        "source=sql" if args.source == "sql" else "",
+        f"types={args.types}" if args.types else "",
+    ]
+    notes = "; ".join(filter(None, [*auto, args.notes]))
     row = results_row(today, args.name, summary, notes)
     print(f"\n{summary.model_dump_json(indent=2)}\n\n{row}\n\nDetails: {run_path}")
 

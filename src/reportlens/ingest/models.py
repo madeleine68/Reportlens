@@ -44,3 +44,26 @@ class Chunk(BaseModel):
     def embedding_text(self) -> str:
         """What gets embedded: the label (if any) followed by the chunk text."""
         return f"{self.context}\n{self.text}" if self.context else self.text
+
+
+PeriodKind = Literal["year", "quarter", "change", "unknown"]
+
+
+class TableCell(BaseModel):
+    """One numeric cell of a report table, with its row and column labels (Phase 3)."""
+
+    company: str
+    report_year: int  # fiscal year of the report the table is in
+    table_id: str  # e.g. "rbc-2023-t0042": groups the cells of one table
+    table_title: str  # the table's section heading, e.g. "T3 Impact of adjustments"
+    page: int
+    row_index: int  # 0 = first row below the header
+    row_label: str
+    row_group: str  # latest label-only row above, e.g. "Adjusted Results"; "" if none
+    column_index: int  # 1 = first value column (column 0 holds the row labels)
+    column_label: str
+    raw_text: str  # the cell as printed, e.g. "$ (367)"
+    value: float
+    unit: str | None  # "millions", "billions", "thousands", "percent", "bps" or None
+    period_year: int | None  # year the column covers, if it names one
+    period_kind: PeriodKind

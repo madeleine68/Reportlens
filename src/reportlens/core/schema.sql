@@ -38,3 +38,27 @@ CREATE INDEX IF NOT EXISTS chunks_tsv_gin ON chunks USING gin (tsv);
 
 -- Phase 2 contextual chunking: the label embedded with each chunk ('' for naive chunks).
 ALTER TABLE chunks ADD COLUMN IF NOT EXISTS context TEXT NOT NULL DEFAULT '';
+
+-- Phase 3: every numeric cell of every parsed table, with its row and column labels.
+-- Not tied to `documents` (which tracks chunk loads): scripts/load_tables.py replaces a report's
+-- cells on every run. The SQL tool reads this table, so it holds no text beyond the labels.
+CREATE TABLE IF NOT EXISTS table_cells (
+    company      TEXT NOT NULL,
+    report_year  INTEGER NOT NULL,
+    table_id     TEXT NOT NULL,               -- e.g. 'rbc-2023-t0042'
+    table_title  TEXT NOT NULL,
+    page         INTEGER NOT NULL,
+    row_index    INTEGER NOT NULL,
+    row_label    TEXT NOT NULL,
+    row_group    TEXT NOT NULL,               -- latest label-only row above, e.g. 'Adjusted Results'
+    column_index INTEGER NOT NULL,
+    column_label TEXT NOT NULL,
+    raw_text     TEXT NOT NULL,
+    value        DOUBLE PRECISION NOT NULL,
+    unit         TEXT,                        -- millions | billions | thousands | percent | bps
+    period_year  INTEGER,
+    period_kind  TEXT NOT NULL,               -- year | quarter | change | unknown
+    PRIMARY KEY (table_id, row_index, column_index)
+);
+
+CREATE INDEX IF NOT EXISTS table_cells_company_year ON table_cells (company, report_year);

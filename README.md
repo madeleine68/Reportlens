@@ -19,6 +19,9 @@ POSTGRES_DB=reportlens_contextual CHUNKING=contextual uv run python scripts/inge
 # Tables kept as rows and columns (slow: ~25 min per report on a laptop CPU), in their own database:
 PARSE_TABLES=true CHUNKING=tables POSTGRES_DB=reportlens_tables uv run python scripts/ingest_all.py --companies bce,rbc,scotiabank
 
+# Load every table number into Postgres for SQL (needs the table parses above; takes seconds):
+uv run python scripts/load_tables.py
+
 # Ask a question:
 uv run python scripts/ask.py "How many wireless subscribers did Bell have in 2024?"
 ```
@@ -207,7 +210,8 @@ Many questions are about numbers in tables, which plain text search handles poor
 flowchart LR
     pdf["Annual report PDF"] --> parse["Parse with table model on<br/>tables keep rows and columns"]
     parse --> text[("Text chunks<br/>pgvector")]
-    parse --> fin[("financials table<br/>company, year, metric,<br/>value, unit, page")]
+    parse --> cells[("table_cells<br/>every number with its row,<br/>column, unit, year, page")]
+    cells --> fin[("financials table<br/>company, year, metric,<br/>value, unit, page")]
     parse --> kg[("Knowledge graph<br/>Neo4j: companies, segments,<br/>subsidiaries, executives")]
     q["Question"] --> sqltool["Text-to-SQL tool<br/>read-only, row limit,<br/>timeout"]
     q --> cypher["Graph query tool<br/>Cypher"]
@@ -216,11 +220,12 @@ flowchart LR
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
-    class pdf,parse,text done
+    class pdf,parse,text,cells done
     class fin,kg,q,sqltool,cypher planned
 ```
 
 - **Tables with structure** (`PARSE_TABLES=true`, `CHUNKING=tables`): Docling's table model is turned on, so each number keeps its row and column labels. Each table becomes its own chunk, starting with its section heading and header row; a table too big for one chunk is split between rows and every piece repeats the header. The table model crashes at random on this laptop's CPU, so each report is converted in 20-page slices, each in a fresh process with a timeout and up to 3 attempts (about 35–45 min per report). Table chunks live in their own database (`reportlens_tables`); measured above, they aren't the default.
+- **`table_cells`** (`ingest/tables.py`, `scripts/load_tables.py`): every number in every parsed table becomes one row, labelled with its row, its column header, its unit (millions, percent, dollars per share…), the year and kind of period it covers (full year, quarter, % change) and its page. Rules only, no LLM: 110,647 cells from 12 reports in about 13 seconds. Rows like "Reported Results" and "Adjusted Results" that head the rows below them are kept as a `row_group`, so the *reported* and *adjusted* net income no longer look alike.
 - **`financials` table:** key figures go into a normal SQL table, so "net income for all banks in 2023" becomes a simple query.
 - **Text-to-SQL:** the LLM writes the SQL, but it runs with a read-only database user, on approved tables only, with a timeout and a row limit.
 - **Knowledge graph:** relationships such as "which subsidiaries belong to which segment" are stored in Neo4j and queried with Cypher.

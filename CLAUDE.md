@@ -59,7 +59,7 @@ reportlens/
 ├── pyproject.toml
 ├── src/reportlens/
 │   ├── core/             # config.py (pydantic-settings), llm.py, db.py, logging.py
-│   ├── ingest/           # parse.py, chunking.py, embed.py, load.py, figures.py
+│   ├── ingest/           # parse.py, chunking.py, embed.py, load.py, tables.py, figures.py
 │   ├── retrieval/        # vector.py, keyword.py, hybrid.py, rerank.py, filters.py
 │   ├── sources/          # sql_tool.py, graph_tool.py, web_tool.py
 │   ├── agents/           # graph.py, router.py, self_rag.py, corrective.py
@@ -83,6 +83,7 @@ uv sync                                              # install deps
 docker compose up -d                                 # start postgres (+ neo4j later)
 uv run python scripts/ingest_all.py                  # parse, chunk, embed, load
 PARSE_TABLES=true CHUNKING=tables POSTGRES_DB=reportlens_tables uv run python scripts/ingest_all.py  # Phase 3: tables kept as rows/columns (~25 min/report on CPU)
+uv run python scripts/load_tables.py                 # Phase 3: table numbers -> table_cells (needs table parses)
 uv run python scripts/ask.py "What was RBC's net income in 2023?"   # ask one question
 uv run python evals/run_evals.py --name "baseline"   # run evals, append to results.md
 uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.jsonl  # runner smoke test
@@ -128,7 +129,7 @@ Keep this section up to date when commands change.
 ### Phase 3: Structured data
 
 - [ ] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts not started; see DECISIONS.md 2026-10-13)
-- [ ] `financials` table: `(company, year, metric, value, unit, source_page)`
+- [ ] `financials` table: `(company, year, metric, value, unit, source_page)` (step 1 done: every numeric cell in `table_cells`, rule-based; next: curated metrics on top; see DECISIONS.md 2026-10-14)
 - [ ] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit
 - [ ] Neo4j graph: Company, Segment, Subsidiary, Executive nodes and their relationships
 - [ ] Cypher query tool

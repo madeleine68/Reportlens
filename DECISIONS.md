@@ -234,3 +234,15 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 - **Part of the faithfulness drop is the judge's error:** in q023 the cited chunk says "our team consisted of 40,390 employees", yet the judge marked "BCE had 40,390 employees" as unsupported. q004 and q039 were not checked.
 
 **Cost:** table-mode parsing took about 35–45 min per report on this CPU (vs ~7 min in light mode); one full answer-level run (~113k answer-model tokens, most of a day's free-tier quota).
+
+## 2026-10-14 — Table cells extracted with rules, not an LLM
+
+**Context:** The `financials` table and SQL tool need numbers with labels. The table-mode parses hold 2,302 tables as Markdown grids whose first line is the header row (Docling flattens multi-level headers, e.g. `For the year ended - 2023 - After-tax`).
+
+**Options considered:**
+- LLM extraction per table into `(company, year, metric, value, unit, page)`: flexible, but thousands of tables would take days of the free tier's fast-model quota, and the output would need checking anyway.
+- Rules: every numeric cell becomes a row labelled with its row, column, unit and period, and a small curated `financials` table is built on top (Step 2).
+
+**Decision:** Rules. `ingest/tables.py` writes every numeric cell to `table_cells` (110,647 cells from 12 reports, loaded in ~13 s by `scripts/load_tables.py`). Parentheses mean negative; a lone `-` is nil, not 0. Unit comes from the cell (`%`, `bps`), then per-share row labels (`dollars`), then the column header, then the table's corner cell or title (`millions`, `billions`, `thousands`). Period year and kind (`year`, `quarter`, `change`, `unknown`) come from the column header, falling back to the corner cell or title. A row with a label but no values (e.g. "Reported Results", "Adjusted Results") becomes the `row_group` of the rows below it, so reported and adjusted figures with the same row label stay apart. `table_cells` lives in the main `reportlens` database, next to the naive chunks, and isn't tied to `documents`: it's replaced in full on every load.
+
+**Eval evidence:** none yet (Step 4). Spot checks against eval answers: Scotiabank 2023 net income attributable to equity holders is 7,410 under *Reported Results* (8,320 under *Adjusted Results*) and under the *Total* column of the segment table (4,019 under *Canadian Banking*); RBC 2024 net income 16,240; RBC 2024 CET1 ratio 13.2%; Scotiabank 2023 diluted EPS 5.78; BCE 2024 capex 3,897. Known gaps: 22% of cells have no unit (e.g. BCE's segment table states no scale) and 18% have no period year (mostly columns with an empty header).

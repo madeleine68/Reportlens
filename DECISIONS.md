@@ -303,6 +303,14 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 - **Recall (0.47) isn't comparable with text search:** the SQL tool often reads a figure from a different table than the pages listed in the eval set, so a correct answer can have recall 0.
 - q036 hit a provider JSON error and was re-run alone, as in Phase 2.
 
-**Fixed after this run:** in q028 the SQL model picked the winner in SQL (`ORDER BY value DESC LIMIT 1`), so the answer model saw only RBC and refused. The prompt now asks for one row per company and year in comparisons; q028 passes manually. A full re-run with that rule ran out of the free tier's daily fast-model tokens after 9 of 33 questions (same 0.94 as before on those 9), so it is **pending**. Because the fix came from looking at an eval result, the re-run should be read as tuned on this set.
+**Fixed after this run:** in q028 the SQL model picked the winner in SQL (`ORDER BY value DESC LIMIT 1`), so the answer model saw only RBC and refused. The prompt now asks for one row per company and year in comparisons; q028 passes manually. A full re-run with that rule ran out of the free tier's daily fast-model tokens after 9 of 33 questions (same 0.94 as before on those 9), so it was re-run the next day (see 2026-10-15). Because the fix came from looking at an eval result, the re-run should be read as tuned on this set.
 
 **Cost note:** the SQL tool spends mostly fast-model tokens (a ~2k-token schema prompt per question, plus the two judge calls in evals), so one 33-question SQL eval uses roughly a third of the fast model's daily quota.
+
+## 2026-10-15 — SQL tool re-run with the comparison rule: 0.80
+
+**Context:** the re-run left pending on 2026-10-14, after the SQL prompt gained the rule "one row per company and year in comparisons; don't pick the winner in SQL".
+
+**Decision:** keep the rule.
+
+**Eval evidence (n=33, numeric/trend/comparison):** correctness 0.79 → **0.80**, faithfulness 0.98 → **1.00**, ~500 main-model tokens per question. q028 (the CET1 comparison that motivated the rule) went 0 → 1, and q019 0.5 → 1; q014 and q034 went 1 → 0.5 on wording (one stated a restated prior-year figure, one omitted context the expected answer includes). So the rule fixes what it targeted, and the rest is run-to-run noise of about one question. The rule came from reading an eval result, so this number is tuned on this set. q039 hit the per-minute rate limit (the graph extraction was running at the same time) and was re-run alone.

@@ -133,7 +133,7 @@ Keep this section up to date when commands change.
 
 - [ ] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts not started; see DECISIONS.md 2026-10-13)
 - [x] `financials` table: `(company, year, metric, value, unit, source_page)` (plus report_year, scope, basis; 12 metrics from `table_cells` by rules + vote; 29/33 eval figures found; see DECISIONS.md 2026-10-14)
-- [x] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit (`sources/sql_tool.py` + `sql_safety.py` with sqlglot; correctness 0.79 vs 0.67 for text on the 33 numeric/trend/comparison questions; re-run with the comparison rule pending; see DECISIONS.md 2026-10-14)
+- [x] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit (`sources/sql_tool.py` + `sql_safety.py` with sqlglot; correctness 0.80 (with the comparison rule) vs 0.67 for text on the 33 numeric/trend/comparison questions; see DECISIONS.md 2026-10-14 and 2026-10-15)
 - [ ] Neo4j graph: Company, Segment, Subsidiary, Executive nodes and their relationships
 - [ ] Cypher query tool
 - [ ] Add numeric and relationship questions to evals (**human adds them**)

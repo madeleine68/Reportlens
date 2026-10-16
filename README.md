@@ -35,7 +35,7 @@ uv run python scripts/ask.py --sql "Which bank had the higher CET1 ratio in 2024
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
-| 3. Structured data | Real tables, SQL tool, knowledge graph | 🟡 In progress: SQL tool built and measured (0.79 vs 0.67 on numeric questions); graph next |
+| 3. Structured data | Real tables, SQL tool, knowledge graph | 🟡 In progress: SQL tool built and measured (0.80 vs 0.67 on numeric questions); graph next |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
 | 5. Ship | API, UI, deployment | ⬜ Planned |
 
@@ -100,10 +100,11 @@ Tables fixed the questions where the model had picked the wrong row (3.5 questio
 | Source (same 33 questions) | Correctness | Tokens per question |
 |----------------------------|-------------|---------------------|
 | Text search (Phase 2 stack) | 0.67 | ~2,900 |
-| **SQL tool** | **0.79** | **~560** |
-| Better of the two per question | 0.94 | |
+| SQL tool | 0.79 | ~560 |
+| **SQL tool + comparison rule** | **0.80** | **~500** |
+| Better of text and the first SQL run, per question | 0.94 | |
 
-SQL fixes the "right page, wrong label" answers: the bank's total instead of a segment's, reported instead of adjusted, the restated prior year. Text search still wins "why" questions and facts only in the prose (BCE's exact headcount). Picking the right one per question is the job of the Phase 4 router.
+SQL fixes the "right page, wrong label" answers: the bank's total instead of a segment's, reported instead of adjusted, the restated prior year. Text search still wins "why" questions and facts only in the prose (BCE's exact headcount). Picking the right one per question is the job of the Phase 4 router. The second SQL run adds one prompt rule (in comparisons, return a row per company and year instead of picking the winner in SQL), which fixed the CET1 comparison it was written for.
 
 **Where the Phase 2 stack still fails** (10 of 42 questions wrong, 2 partly right): mostly numbers whose right page *was* retrieved but whose label got lost, such as an *adjusted* figure reported instead of the *reported* one (Phase 3: tables), and comparisons that need two reports at once (Phase 4: agentic layer).
 

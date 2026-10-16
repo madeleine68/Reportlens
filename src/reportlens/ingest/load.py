@@ -89,3 +89,31 @@ def load_document(
         len(chunks),
         time.perf_counter() - start,
     )
+
+
+def load_figure_chunks(
+    conn: psycopg.Connection,
+    doc_id: str,
+    chunks: list[Chunk],
+    embed: Embedder = embed_passages,
+) -> None:
+    """Replace a report's chart chunks (kind 'figure'), leaving its text chunks as they are.
+
+    The report must already be loaded. Re-ingesting it (a changed PDF or setting) deletes its
+    figure chunks too; scripts/describe_figures.py puts them back from its cache.
+    """
+    vectors = embed([chunk.embedding_text() for chunk in chunks]) if chunks else []
+    with conn.transaction():
+        conn.execute("DELETE FROM chunks WHERE document_id = %s AND kind = 'figure'", (doc_id,))
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO chunks (chunk_id, document_id, company, year, section, pages, text,"
+                " num_tokens, embedding, kind)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'figure')",
+                [
+                    (c.chunk_id, doc_id, c.company, c.year, c.section, c.pages, c.text,
+                     c.num_tokens, vector)
+                    for c, vector in zip(chunks, vectors, strict=True)
+                ],
+            )  # fmt: skip
+    log.info("load.figures id=%s chunks=%d", doc_id, len(chunks))

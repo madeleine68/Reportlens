@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr
     llm_model_main: str
     llm_model_fast: str
+    llm_model_vision: str = "qwen/qwen3.8-27b"  # Phase 3 chart summaries; must accept images
     # Retries on rate limits / transient errors (the SDK waits between tries). Free tiers need more.
     llm_max_retries: int = 6
     # Main-model prices in USD per million tokens, for cost/query in evals. 0 = free tier.
@@ -64,6 +65,8 @@ class Settings(BaseSettings):
     rrf_k: int = 60  # RRF damping constant; 60 is the value from the original paper
     # Rerank: fetch this many candidates, rescore them with a cross-encoder, keep retrieval_top_k.
     retrieval_rerank: bool = False
+    # Phase 3: also search the chart summaries (chunks with kind = 'figure').
+    retrieval_figures: bool = False
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     rerank_candidates: int = 40
 
@@ -102,6 +105,11 @@ class Settings(BaseSettings):
     def graph_cache_path(self) -> Path:
         """Cache of LLM-extracted graph facts, keyed by model, prompt and source text."""
         return self.data_dir / "cache" / "graph_facts.json"
+
+    @property
+    def figure_cache_path(self) -> Path:
+        """Cache of vision-model chart summaries, keyed by model, prompt and image."""
+        return self.data_dir / "cache" / "figures.json"
 
     @property
     def neo4j_uri(self) -> str:

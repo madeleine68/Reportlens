@@ -125,8 +125,11 @@ def extract_filters_cached(
 
 
 def filter_conditions(filters: QueryFilters | None) -> tuple[list[str], dict[str, list]]:
-    """SQL conditions (to be AND-ed into a WHERE clause) and their parameters for the filters."""
-    conditions: list[str] = []
+    """SQL conditions (to be AND-ed into a WHERE clause) and their parameters for the filters.
+
+    Chart summaries are left out unless RETRIEVAL_FIGURES is on, whatever the filters.
+    """
+    conditions: list[str] = [] if get_settings().retrieval_figures else ["kind = 'text'"]
     params: dict[str, list] = {}
     if filters and filters.companies:
         conditions.append("company = ANY(%(companies)s)")

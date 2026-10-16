@@ -168,8 +168,9 @@ class FactCache:
         self._entries: dict[str, dict] = json.loads(path.read_text()) if path.exists() else {}
 
     @staticmethod
-    def key(messages: list[llm.Message]) -> str:
-        payload = json.dumps([get_settings().llm_model_fast, messages])
+    def key(messages: list[llm.Message], model: str | None = None) -> str:
+        """Hash of the model (the fast one by default) and the exact messages sent."""
+        payload = json.dumps([model or get_settings().llm_model_fast, messages])
         return hashlib.sha256(payload.encode()).hexdigest()
 
     def get(self, key: str) -> dict | None:

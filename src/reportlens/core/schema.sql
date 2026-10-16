@@ -39,6 +39,10 @@ CREATE INDEX IF NOT EXISTS chunks_tsv_gin ON chunks USING gin (tsv);
 -- Phase 2 contextual chunking: the label embedded with each chunk ('' for naive chunks).
 ALTER TABLE chunks ADD COLUMN IF NOT EXISTS context TEXT NOT NULL DEFAULT '';
 
+-- Phase 3 charts: 'text' for chunks of the report's text, 'figure' for a chart's summary
+-- (scripts/describe_figures.py). Retrieval reads figures only when RETRIEVAL_FIGURES=true.
+ALTER TABLE chunks ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'text';
+
 -- Phase 3: every numeric cell of every parsed table, with its row and column labels.
 -- Not tied to `documents` (which tracks chunk loads): scripts/load_tables.py replaces a report's
 -- cells on every run. The SQL tool reads this table, so it holds no text beyond the labels.

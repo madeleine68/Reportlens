@@ -356,3 +356,25 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 - The Cypher writer gets two retries instead of one: Groq can reject the JSON (one retry drops JSON mode) and then return an empty reply.
 
 **Eval evidence (n=2, relationship):** correctness 0.50, faithfulness 0.50, ~850 tokens per question. q042 ("Which American bank does RBC own?") correct with all four reports' pages; q027 ("RBC's U.S. commercial bank") wrong, answering RBC USA Holdco Corporation: the graph has names and offices but not what business a subsidiary is in. Text search gets both (1.0 in every recorded run). Two questions can't rank the sources; questions on executives, ownership shares and segment changes are needed (the owner adds them). Known weakness seen in trials: for "which American bank", the model sometimes filters on 'bank' in the name without returning locations, so the "American" part comes from its own knowledge rather than the rows.
+
+## 2026-10-16 — Chart summaries: rule-picked candidates, a vision model, estimates marked
+
+**Context:** Phase 3 multimodal parsing. Docling's layout model marks pictures (~1,170 in the 12 light-mode parses) but drops the text inside them, so chart contents were invisible to search.
+
+**Options considered:**
+- **Send every picture to a vision model:** ~1,170 calls at ~2.8k tokens each, most of them photos and logos.
+- **Docling's picture classifier:** needs a re-parse of every report (~7 min each in light mode, much longer with the extra model on this CPU).
+- **Store only the PDF text inside each picture, no LLM:** free and exact, but axis ticks and labels without the chart's shape don't say what it shows, and bar values that aren't printed are lost.
+- **A rule picks candidates, a vision model describes them.**
+
+**Decision:** the last one.
+- **Candidates:** pictures with at least 4 numbers in the PDF text layer inside their box (384). These reports draw charts as vector graphics with real text; photos and logos have none. All of the first 51 described were real charts.
+- **Vision model:** `qwen/qwen3.8-27b`, the only image-capable model on this Groq account (`LLM_MODEL_VISION`), called through `core/llm.py` (new `vision` tier and `image_message`). It gets the crop (≤ 1,024 px), the printed text and the nearest heading above the picture, which often holds the title and unit outside the picture ("OPERATING REVENUES ($ millions)"); without the heading the first trial said "a financial metric … dollars".
+- **Estimates are marked:** each value has `printed`; a value read off a bar's height or a line's position is written into the chunk as "(estimated from the chart)". A probe read 98,000 for a bar at about 110,000, so these must never pass as printed figures. In the first 51 summaries, 12 of 201 values were estimates, all from one line chart without printed values.
+- **Storage:** one chunk per chart in the main database, `kind = 'figure'`, ids `{company}-{year}-fig-NNN`. Retrieval reads them only with `RETRIEVAL_FIGURES=true`, so every earlier eval row stays comparable. Summaries are cached by model, prompt and image.
+
+**Cost:** ~2.8k vision tokens per chart (the image costs ~1.8k even when small, so smaller crops save little), about 1 call per minute under the per-minute limit, and the daily limit stopped the first run after ~63 calls. Describing all 384 takes about 6 daily runs.
+
+**Known limitation:** BCE's 2022 report has 1 candidate: its charts are images without a text layer, so the rule misses them.
+
+**Eval evidence:** none yet; a retrieval-only comparison (best stack, with and without figure chunks) waits until all reports are described.

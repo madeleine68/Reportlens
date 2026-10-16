@@ -86,6 +86,7 @@ PARSE_TABLES=true CHUNKING=tables POSTGRES_DB=reportlens_tables uv run python sc
 uv run python scripts/load_tables.py                 # Phase 3: table numbers -> table_cells -> financials (needs table parses)
 uv run python scripts/check_financials.py            # financials vs the eval set's expected numbers
 uv run python scripts/load_graph.py --show           # Phase 3: build the Neo4j graph (fast LLM, cached) and print it
+uv run python scripts/describe_figures.py            # Phase 3: describe charts with the vision model (cached, resumable; ~70/day on the free tier)
 uv run python scripts/ask.py "What was RBC's net income in 2023?"   # ask one question
 uv run python scripts/ask.py --sql "What was RBC's net income in 2023?"   # Phase 3: answer via the SQL tool
 uv run python scripts/ask.py --graph "Who was Scotiabank's CFO in 2024?"  # Phase 3: answer via the graph tool
@@ -134,7 +135,7 @@ Keep this section up to date when commands change.
 
 ### Phase 3: Structured data
 
-- [ ] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts not started; see DECISIONS.md 2026-10-13)
+- [ ] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts: `ingest/figures.py` built, 51 of 384 candidates described so far at ~70/day on the vision quota, not yet measured; see DECISIONS.md 2026-10-13 and 2026-10-16)
 - [x] `financials` table: `(company, year, metric, value, unit, source_page)` (plus report_year, scope, basis; 12 metrics from `table_cells` by rules + vote; 29/33 eval figures found; see DECISIONS.md 2026-10-14)
 - [x] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit (`sources/sql_tool.py` + `sql_safety.py` with sqlglot; correctness 0.80 (with the comparison rule) vs 0.67 for text on the 33 numeric/trend/comparison questions; see DECISIONS.md 2026-10-14 and 2026-10-15)
 - [x] Neo4j graph: Company, Segment, Subsidiary, Executive nodes and their relationships (segments from `financials`, subsidiaries and executives by fast-LLM extraction, every relationship with report year and page; 51 segment, 247 subsidiary and 112 executive relationships across BCE, RBC and Scotiabank; see DECISIONS.md 2026-10-16)

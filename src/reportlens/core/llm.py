@@ -3,10 +3,11 @@
 Talks to any OpenAI-compatible endpoint (Groq, Gemini, Ollama, ...) chosen via .env.
 """
 
+import base64
 import json
 import time
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 from openai import BadRequestError, OpenAI
 from pydantic import BaseModel, ValidationError
@@ -16,8 +17,8 @@ from reportlens.core.logging import get_logger
 
 log = get_logger(__name__)
 
-Tier = Literal["main", "fast"]
-Message = dict[str, str]
+Tier = Literal["main", "fast", "vision"]
+Message = dict[str, Any]  # content is a string, or a list of text and image parts (vision)
 
 
 class LLMResponse(BaseModel):
@@ -42,7 +43,24 @@ def _client() -> OpenAI:
 
 def _model_for(tier: Tier) -> str:
     settings = get_settings()
-    return settings.llm_model_main if tier == "main" else settings.llm_model_fast
+    models = {
+        "main": settings.llm_model_main,
+        "fast": settings.llm_model_fast,
+        "vision": settings.llm_model_vision,
+    }
+    return models[tier]
+
+
+def image_message(text: str, png: bytes) -> Message:
+    """A user message holding text plus one PNG image, for the vision tier."""
+    url = "data:image/png;base64," + base64.b64encode(png).decode()
+    return {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": text},
+            {"type": "image_url", "image_url": {"url": url}},
+        ],
+    }
 
 
 def chat(

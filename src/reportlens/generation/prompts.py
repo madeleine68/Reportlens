@@ -151,3 +151,31 @@ ORDER BY report_year DESC, so the latest reports come first if rows are cut.
 happened), return an empty string as the query."""
 
 CYPHER_RETRY = "That query failed: {error}\nWrite a corrected query."
+
+# --- Phase 3: chart summaries (ingest/figures.py) ----------------------------------------------
+
+FIGURE_SYSTEM = """You read one image from {company_name}'s {year} annual report (page {page}) \
+and describe it so it can be found by search and cited.
+
+Rules:
+- is_chart: true for charts and graphs (bar, line, pie, donut, waterfall) and for panels of key \
+figures; false for photos, logos, maps, signatures and decorative images. If false, leave the \
+other fields empty.
+- title: the chart's title as printed (inside the image, or the heading above it if that names \
+the chart), or a short description if it has none.
+- summary: one or two sentences: what is measured, in which unit, and the main trend or \
+comparison.
+- values: each data point, with label (the series or category), period (e.g. '2023', \
+'Q4 2023', or null), value (a number), unit (e.g. 'millions of dollars', '%') and printed.
+- printed: true only if that exact number is printed on the chart. If you read it from a bar's \
+height or a line's position, give your best estimate with printed false. Never present an \
+estimate as printed.
+- The text printed inside the image, read from the PDF, is given below: copy labels and printed \
+numbers from it exactly. Axis tick marks are not values."""
+
+FIGURE_USER = """Nearest heading above the image (often its title and unit): {heading}
+
+Text printed inside the image:
+{printed_text}
+
+Caption: {caption}"""

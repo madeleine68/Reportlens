@@ -108,6 +108,8 @@ Tables fixed the questions where the model had picked the wrong row (3.5 questio
 
 SQL fixes the "right page, wrong label" answers: the bank's total instead of a segment's, reported instead of adjusted, the restated prior year. Text search still wins "why" questions and facts only in the prose (BCE's exact headcount). Picking the right one per question is the job of the Phase 4 router. The second SQL run adds one prompt rule (in comparisons, return a row per company and year instead of picking the winner in SQL), which fixed the CET1 comparison it was written for.
 
+**Graph tool result (Phase 3):** the eval set has only two relationship questions, both about RBC's U.S. bank. The graph answered *"Which American bank does RBC own?"* (City National Bank, citing the subsidiaries table in all four reports) but not *"What is the name of RBC's U.S. commercial bank?"*: the graph knows each subsidiary's name and principal office, not what kind of business it is, so the model picked *RBC USA Holdco Corporation*. Text search gets both right. Two questions measure almost nothing; the graph's strengths (executives by year, ownership shares over time, segment changes) need questions of their own, which the owner adds.
+
 **Where the Phase 2 stack still fails** (10 of 42 questions wrong, 2 partly right): mostly numbers whose right page *was* retrieved but whose label got lost, such as an *adjusted* figure reported instead of the *reported* one (Phase 3: tables), and comparisons that need two reports at once (Phase 4: agentic layer).
 
 What the baseline shows, and which phase targets each problem:
@@ -236,13 +238,16 @@ flowchart LR
     reader --> fin
     reader --> cells
     reader --> sqlans["Answer from rows<br/>main LLM cites each row's page"]
-    q --> cypher["Graph query tool<br/>Cypher"]
-    cypher --> kg
+    q --> cypher["Graph query tool<br/>fast LLM writes one<br/>Cypher query"]
+    cypher --> csafety["Safety check<br/>read clauses only, no CALL<br/>or LOAD CSV, our labels,<br/>row limit"]
+    csafety --> readtx["Read transaction<br/>server refuses writes,<br/>5 s timeout"]
+    readtx --> kg
+    readtx --> graphans["Answer from rows<br/>main LLM cites each<br/>relationship's page"]
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
     class pdf,parse,text,cells,fin,q,sqltool,safety,reader,sqlans,extract,kg done
-    class cypher planned
+    class cypher,csafety,readtx,graphans done
 ```
 
 - **Tables with structure** (`PARSE_TABLES=true`, `CHUNKING=tables`): Docling's table model is turned on, so each number keeps its row and column labels. Each table becomes its own chunk, starting with its section heading and header row; a table too big for one chunk is split between rows and every piece repeats the header. The table model crashes at random on this laptop's CPU, so each report is converted in 20-page slices, each in a fresh process with a timeout and up to 3 attempts (about 35–45 min per report). Table chunks live in their own database (`reportlens_tables`); measured above, they aren't the default.
@@ -255,7 +260,7 @@ flowchart LR
   - `(Executive)-[:HOLDS_ROLE]->(Company)`: the fast LLM reads only short passages that contain an officer title, such as the signatures under management's report. A name that no passage contains is thrown away, so the LLM can't invent an executive.
   - Every relationship stores the report year and page, so graph answers can cite pages too, and changes over time are visible (RBC's CFO: Nadine Ahn → Katherine Gibson in 2024).
   - Names are matched loosely ("David I. McKay" = "David McKay", "Scotiabank& Trust" = "Scotiabank & Trust"), and LLM output is cached, so rebuilding the graph is free.
-- **Cypher tool** (next): the LLM writes a read-only Cypher query, checked like the SQL tool's queries.
+- **Graph query tool** (`sources/graph_tool.py`, `sources/cypher_safety.py`; try it with `scripts/ask.py --graph "..."`): the same steps as the SQL tool. The fast LLM is told the graph's labels, relationships and company ids and writes one Cypher query, which must return each relationship's company, report year and page so the answer can cite it. Neo4j Community has no read-only users, so there are two layers of protection: (1) a check on the query's text (with strings and comments blanked out first) allows only read clauses, rejects `CALL` (procedures), `LOAD CSV` (reads files and URLs), `USE` (other databases) and `apoc.*`/`dbms.*` functions, allows only the graph's 4 labels and 3 relationship types, and adds a 50-row limit; (2) the query runs in a read transaction, which the server refuses to write in, with a 5-second timeout, and only the first 50 rows are fetched. A rejected or failing query goes back to the LLM with the reason. Example: *"How did RBC's CFO change over the years?"* → `MATCH (e:Executive)-[r:HOLDS_ROLE]->(c:Company {id:'rbc'}) WHERE r.role = 'cfo' ...` → "Nadine Ahn in 2021 [1], 2022 [2] and 2023 [3]. In 2024 the CFO changed to Katherine Gibson [4]."
 
 ### Phase 4: Agentic layer ⬜
 

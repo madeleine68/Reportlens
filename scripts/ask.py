@@ -3,26 +3,34 @@
 Usage:
     uv run python scripts/ask.py "What was RBC's net income in 2023?"
     uv run python scripts/ask.py --sql "What was RBC's net income in 2023?"   # Phase 3 SQL tool
+    uv run python scripts/ask.py --graph "Who was Scotiabank's CFO in 2024?"  # Phase 3 graph tool
 """
 
 import argparse
 
 from reportlens.core.config import get_settings
 from reportlens.core.db import connect, connect_reader
+from reportlens.core.graph_db import connect_graph
 from reportlens.core.logging import setup_logging
 from reportlens.generation.answer import answer_question, format_pages
-from reportlens.sources.sql_tool import answer_with_sql
+from reportlens.sources.graph_tool import answer_with_graph
+from reportlens.sources.sql_tool import RowsAnswer, answer_with_sql
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Answer a question from the annual reports.")
     parser.add_argument("question")
     parser.add_argument("--show-chunks", action="store_true", help="also print retrieved chunks")
-    parser.add_argument("--sql", action="store_true", help="answer from the financial tables")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--sql", action="store_true", help="answer from the financial tables")
+    source.add_argument("--graph", action="store_true", help="answer from the knowledge graph")
     args = parser.parse_args()
     setup_logging(get_settings().log_level)
     if args.sql:
         ask_sql(args.question)
+        return
+    if args.graph:
+        ask_graph(args.question)
         return
 
     with connect() as conn:
@@ -47,11 +55,22 @@ def ask_sql(question: str) -> None:
     connect().close()  # makes sure the schema and the read-only role exist
     with connect_reader() as reader:
         answer = answer_with_sql(reader, question)
+    print_rows_answer(answer, f"SQL: {answer.sql or '(none)'}")
 
+
+def ask_graph(question: str) -> None:
+    """Answer with the graph tool and print the Cypher and rows behind the answer."""
+    with connect_graph() as driver:
+        answer = answer_with_graph(driver, question)
+    print_rows_answer(answer, f"Cypher:\n{answer.cypher or '(none)'}")
+
+
+def print_rows_answer(answer: RowsAnswer, query: str) -> None:
+    """Print a SQL or graph answer, its citations, the query and the rows it used."""
     print(f"\n{answer.text}\n")
     for c in answer.citations:
         print(f"  [{c.number}] {c.company.upper()} {c.year} report, page {c.page}")
-    print(f"\nSQL: {answer.sql or '(none)'}")
+    print(f"\n{query}")
     if answer.error:
         print(f"Error: {answer.error}")
     for i, row in enumerate(answer.rows, start=1):

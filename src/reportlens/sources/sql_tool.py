@@ -48,13 +48,12 @@ class SqlCitation(BaseModel):
     page: int
 
 
-class SqlAnswer(BaseModel):
-    """The answer plus the query and rows behind it."""
+class RowsAnswer(BaseModel):
+    """An answer written from query rows (SQL here, Cypher in sources/graph_tool.py)."""
 
     question: str
     text: str
     found: bool
-    sql: str | None  # the query that ran (after the safety check), if any
     columns: list[str]
     rows: list[list[Any]]
     citations: list[SqlCitation]
@@ -63,6 +62,12 @@ class SqlAnswer(BaseModel):
     input_tokens: int  # main-model tokens, as for text answers
     output_tokens: int
     latency_s: float
+
+
+class SqlAnswer(RowsAnswer):
+    """The answer plus the query and rows behind it."""
+
+    sql: str | None  # the query that ran (after the safety check), if any
 
 
 WriteSql = Callable[[list[llm.Message]], SqlQuery]
@@ -185,7 +190,13 @@ def answer_with_sql(
     )
     if not rows:
         return empty
+    return empty.model_copy(update=answer_from_rows(question, query, columns, rows, chat))
 
+
+def answer_from_rows(
+    question: str, query: str | None, columns: list[str], rows: list[list[Any]], chat: Chat
+) -> dict[str, Any]:
+    """The main LLM's answer from the rows, as RowsAnswer fields (text, citations, tokens...)."""
     user = prompts.SQL_ANSWER_USER.format(
         sql=query, rows=format_rows(columns, rows), question=question
     )
@@ -198,26 +209,24 @@ def answer_with_sql(
     )
     text = normalize_markers(reply.text).strip()
     found = not is_not_found(text)
-    return empty.model_copy(
-        update={
-            "text": text,
-            "found": found,
-            "citations": row_citations(text, columns, rows) if found else [],
-            "model": reply.model,
-            "input_tokens": reply.input_tokens,
-            "output_tokens": reply.output_tokens,
-            "latency_s": reply.latency_s,
-        }
-    )
+    return {
+        "text": text,
+        "found": found,
+        "citations": row_citations(text, columns, rows) if found else [],
+        "model": reply.model,
+        "input_tokens": reply.input_tokens,
+        "output_tokens": reply.output_tokens,
+        "latency_s": reply.latency_s,
+    }
 
 
-def as_answer(sql_answer: SqlAnswer) -> Answer:
-    """The SQL answer in the shape the eval runner scores: each row becomes a pseudo-chunk.
+def as_answer(result: RowsAnswer) -> Answer:
+    """A SQL or graph answer in the shape the eval runner scores: each row becomes a pseudo-chunk.
 
     A row's company, report and page let recall check it against the expected pages, and its
     column=value text is what the faithfulness judge reads as the source.
     """
-    index = {name: i for i, name in enumerate(sql_answer.columns)}
+    index = {name: i for i, name in enumerate(result.columns)}
     page_col = index.get("source_page", index.get("page"))
     chunks = [
         RetrievedChunk(
@@ -226,15 +235,15 @@ def as_answer(sql_answer: SqlAnswer) -> Answer:
             year=row[index["report_year"]] if "report_year" in index else 0,
             section=None,
             pages=[row[page_col]] if page_col is not None else [],
-            text=format_row(i, sql_answer.columns, row),
+            text=format_row(i, result.columns, row),
             score=0.0,
         )
-        for i, row in enumerate(sql_answer.rows, start=1)
+        for i, row in enumerate(result.rows, start=1)
     ]
     return Answer(
-        question=sql_answer.question,
-        text=sql_answer.text,
-        found=sql_answer.found,
+        question=result.question,
+        text=result.text,
+        found=result.found,
         citations=[
             Citation(
                 number=c.number,
@@ -243,11 +252,11 @@ def as_answer(sql_answer: SqlAnswer) -> Answer:
                 year=c.year,
                 pages=[c.page],
             )
-            for c in sql_answer.citations
+            for c in result.citations
         ],
         chunks=chunks,
-        model=sql_answer.model,
-        input_tokens=sql_answer.input_tokens,
-        output_tokens=sql_answer.output_tokens,
-        latency_s=sql_answer.latency_s,
+        model=result.model,
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        latency_s=result.latency_s,
     )

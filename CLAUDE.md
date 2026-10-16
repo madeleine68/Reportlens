@@ -61,7 +61,7 @@ reportlens/
 │   ├── core/             # config.py (pydantic-settings), llm.py, db.py, graph_db.py, logging.py
 │   ├── ingest/           # parse.py, chunking.py, embed.py, load.py, tables.py, metrics.py, financials.py, graph.py, graph_names.py, graph_load.py, figures.py
 │   ├── retrieval/        # vector.py, keyword.py, hybrid.py, rerank.py, filters.py
-│   ├── sources/          # sql_tool.py, sql_safety.py, graph_tool.py, web_tool.py
+│   ├── sources/          # sql_tool.py, sql_safety.py, graph_tool.py, cypher_safety.py, web_tool.py
 │   ├── agents/           # graph.py, router.py, self_rag.py, corrective.py
 │   ├── generation/       # answer.py (answers with page citations), prompts.py
 │   ├── evals/            # questions.py, metrics.py, judge.py, runner.py (eval logic)
@@ -88,10 +88,12 @@ uv run python scripts/check_financials.py            # financials vs the eval se
 uv run python scripts/load_graph.py --show           # Phase 3: build the Neo4j graph (fast LLM, cached) and print it
 uv run python scripts/ask.py "What was RBC's net income in 2023?"   # ask one question
 uv run python scripts/ask.py --sql "What was RBC's net income in 2023?"   # Phase 3: answer via the SQL tool
+uv run python scripts/ask.py --graph "Who was Scotiabank's CFO in 2024?"  # Phase 3: answer via the graph tool
 uv run python evals/run_evals.py --name "baseline"   # run evals, append to results.md
 uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.jsonl  # runner smoke test
 uv run python evals/run_evals.py --name "x" --retrieval-only    # recall/MRR only, no answer model (cheap)
 uv run python evals/run_evals.py --name "sql" --source sql --types numeric,trend,comparison  # Phase 3 SQL tool
+uv run python evals/run_evals.py --name "graph" --source graph --types relationship  # Phase 3 graph tool
 uv run uvicorn reportlens.api.main:app --reload      # start API
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
@@ -136,7 +138,7 @@ Keep this section up to date when commands change.
 - [x] `financials` table: `(company, year, metric, value, unit, source_page)` (plus report_year, scope, basis; 12 metrics from `table_cells` by rules + vote; 29/33 eval figures found; see DECISIONS.md 2026-10-14)
 - [x] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit (`sources/sql_tool.py` + `sql_safety.py` with sqlglot; correctness 0.80 (with the comparison rule) vs 0.67 for text on the 33 numeric/trend/comparison questions; see DECISIONS.md 2026-10-14 and 2026-10-15)
 - [x] Neo4j graph: Company, Segment, Subsidiary, Executive nodes and their relationships (segments from `financials`, subsidiaries and executives by fast-LLM extraction, every relationship with report year and page; 51 segment, 247 subsidiary and 112 executive relationships across BCE, RBC and Scotiabank; see DECISIONS.md 2026-10-16)
-- [ ] Cypher query tool
+- [x] Cypher query tool (`sources/graph_tool.py` + `cypher_safety.py`: text check for read-only clauses and known labels, then a read transaction with a timeout and row limit; correctness 0.50 on the 2 relationship questions, where text search gets both; see DECISIONS.md 2026-10-16)
 - [ ] Add numeric and relationship questions to evals (**human adds them**)
 
 ### Phase 4: Agentic layer
@@ -198,6 +200,7 @@ These are the parts I will write myself so I can explain them in interviews. You
 - Cache embeddings and parsed output; never re-parse or re-embed unchanged files
 - Use the cheaper model (`LLM_MODEL_FAST`) for grading, routing and query rewriting; the stronger model (`LLM_MODEL_MAIN`) only for final answers
 - The SQL tool must use a read-only Postgres role. **Never execute LLM-generated SQL with write permissions.**
+- LLM-generated Cypher runs only in a read transaction, after `sources/cypher_safety.py` has checked it.
 - Never commit `.env`, PDFs or API keys
 
 ## Eval set format

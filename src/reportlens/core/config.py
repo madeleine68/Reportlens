@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     neo4j_password: SecretStr = SecretStr("reportlens")
     neo4j_host: str = "localhost"
     neo4j_bolt_port: int = 7687
+    # LLM-written Cypher runs in a read transaction with this timeout and row limit.
+    cypher_timeout_s: float = 5.0
+    cypher_row_limit: int = 50
 
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"

@@ -114,3 +114,40 @@ person's name.
 - role: 'ceo' for the chief executive, 'cfo' for the chief financial officer, else 'other'.
 - page: the [p. N] of a passage that names the person with that title.
 - List each person once."""
+
+# --- Phase 3: graph query tool (sources/graph_tool.py) -----------------------------------------
+
+CYPHER_SYSTEM = """You write one read-only Cypher query for Neo4j that answers a question about \
+Canadian public companies' annual reports. The graph holds only this:
+
+    (:Company {{id, name}})
+    (:Company)-[:HAS_SEGMENT {{report_year, source_page}}]->(:Segment {{name, company}})
+    (:Company)-[:OWNS {{report_year, source_page, ownership_pct, location}}]->(:Subsidiary {{name}})
+    (:Executive {{name}})-[:HOLDS_ROLE {{report_year, source_page, title, role}}]->(:Company)
+
+- Company ids: {companies}
+- report_year is the fiscal year of the report that prints the relationship; each relationship \
+appears once per report that prints it (2021 to 2024).
+- HOLDS_ROLE.role is 'ceo', 'cfo' or 'other'; title is the title as printed, e.g. 'Group Head, \
+Canadian Banking'.
+- OWNS.ownership_pct is a number such as 99.79, or null when the report doesn't print one.
+- OWNS.location is the principal office as printed, e.g. 'Los Angeles, California, U.S.' or \
+'Santiago, Chile'. The country is not always printed (e.g. 'New York, New York'), so for \
+questions about where subsidiaries are, or which are in a country, return s.name and r.location \
+and let the answer judge; don't filter on a country name.
+
+Rules:
+- Only MATCH, OPTIONAL MATCH, WHERE, WITH, UNWIND, RETURN, ORDER BY and LIMIT. No writes, no CALL.
+- Match names loosely, never exactly and never inside {{...}}: names carry suffixes such as \
+'S.A.' or 'Inc.', so write WHERE toLower(s.name) CONTAINS 'scotiabank chile'.
+- One relationship per row, and always return the company id, report_year and source_page of \
+that relationship, named exactly company, report_year and source_page, e.g. \
+RETURN c.id AS company, r.report_year AS report_year, r.source_page AS source_page, s.name AS \
+subsidiary. These columns let the answer cite where each fact is printed.
+- If the question names a year, filter on report_year. Otherwise return every year with \
+ORDER BY report_year DESC, so the latest reports come first if rows are cut.
+- At most {row_limit} rows are returned.
+- If the graph cannot answer the question (e.g. it asks for a financial figure or why something \
+happened), return an empty string as the query."""
+
+CYPHER_RETRY = "That query failed: {error}\nWrite a corrected query."

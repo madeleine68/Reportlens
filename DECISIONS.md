@@ -337,3 +337,22 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 **Known limitation:** the table parse of Scotiabank's 2023 subsidiaries table is garbled (names split across rows next to the wrong locations), so a few 2023 names are wrong, e.g. "Peru Holdings S.A."; one-word fragments such as "Scotia" are dropped by rule.
 
 **Eval evidence:** none yet. The eval set has two relationship questions (q027, q042: City National Bank), and the graph has City National Bank under RBC in all four reports (pages 229, 233, 234, 247). More relationship questions are needed to measure the Cypher tool (the owner adds them).
+
+## 2026-10-16 — Graph query tool: text check plus a read transaction, reusing the SQL tool's answer step
+
+**Context:** Phase 3 Cypher tool. The fast LLM writes Cypher, which is untrusted like its SQL. Neo4j 5 Community has no role-based access, so there is no read-only user to run it as (the SQL tool's second layer).
+
+**Options considered:**
+- **Parse the Cypher:** the safest check, but there is no maintained Cypher parser for Python (the openCypher grammar would need ANTLR and a generated parser to maintain).
+- **Rely on the read transaction alone:** the server refuses every write in it, but it still allows `CALL` procedures (e.g. `dbms.*`), `LOAD CSV` (reads local files and URLs) and `USE` (another database).
+- **Fixed query templates** (one per question kind): fully safe, but every new kind of question would need code.
+- **A check on the query's text, then a read transaction.**
+
+**Decision:** the last one.
+- `sources/cypher_safety.py` first blanks out string literals and comments (keeping positions, so a name such as 'Set Inc.' or a `//` inside a string can't fool it), then requires one statement starting with a read clause, rejects write and admin keywords, `CALL`, `LOAD`, `USE` and `apoc.*`/`dbms.*`/`db.*` functions, allows only the 4 labels and 3 relationship types (map keys such as `{id: 'rbc'}` are skipped), and adds or caps a `LIMIT` of 50. Unknown labels are not a security problem, but the message helps the LLM correct itself.
+- The query runs with `RoutingControl.READ` and a 5 s transaction timeout, and only the first 50 records are fetched (a `LIMIT` after `UNION` limits only the last part). Tests check against the real server that a write is refused even when the text check is bypassed, and that a slow query times out.
+- `graph_tool.py` follows `sql_tool.py` step for step (write, check, run, one retry with the error, answer from numbered rows) and reuses its answer step, row citations and eval adapter through a shared `RowsAnswer` model, so the two tools are easy to compare.
+- Prompt rules learned from four trial questions (none from the eval set's answers): match names with `CONTAINS`, never exactly (the model wrote `{name: 'Scotiabank Chile'}`, but the name is "Scotiabank Chile S.A."); return locations instead of filtering on a country (RBC prints "U.S.", Scotiabank omits the country); with no year named, return every year, latest first, so a cut at 50 rows drops the oldest.
+- The Cypher writer gets two retries instead of one: Groq can reject the JSON (one retry drops JSON mode) and then return an empty reply.
+
+**Eval evidence (n=2, relationship):** correctness 0.50, faithfulness 0.50, ~850 tokens per question. q042 ("Which American bank does RBC own?") correct with all four reports' pages; q027 ("RBC's U.S. commercial bank") wrong, answering RBC USA Holdco Corporation: the graph has names and offices but not what business a subsidiary is in. Text search gets both (1.0 in every recorded run). Two questions can't rank the sources; questions on executives, ownership shares and segment changes are needed (the owner adds them). Known weakness seen in trials: for "which American bank", the model sometimes filters on 'bank' in the name without returning locations, so the "American" part comes from its own knowledge rather than the rows.

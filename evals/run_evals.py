@@ -4,12 +4,14 @@ Usage:
     uv run python evals/run_evals.py --name "baseline"
     uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.jsonl
     uv run python evals/run_evals.py --name "sql tool" --source sql --types numeric,trend,comparison
+    uv run python evals/run_evals.py --name "graph tool" --source graph --types relationship
 
 Per-question details go to evals/runs/{date}-{name}.jsonl. A summary row is appended to
 evals/results.md only when running the real eval set (evals/questions.jsonl).
 """
 
 import argparse
+import contextlib
 import datetime as dt
 import re
 import sys
@@ -17,6 +19,7 @@ from pathlib import Path
 
 from reportlens.core.config import get_settings
 from reportlens.core.db import connect, connect_reader
+from reportlens.core.graph_db import connect_graph
 from reportlens.core.logging import setup_logging
 from reportlens.evals.questions import load_questions
 from reportlens.evals.runner import (
@@ -28,6 +31,7 @@ from reportlens.evals.runner import (
     summarize,
 )
 from reportlens.generation.answer import Answer, answer_question
+from reportlens.sources.graph_tool import answer_with_graph
 from reportlens.sources.sql_tool import answer_with_sql, as_answer
 
 EVALS_DIR = Path(__file__).resolve().parent
@@ -49,14 +53,15 @@ def main() -> int:
     )
     parser.add_argument(
         "--source",
-        choices=["text", "sql"],
+        choices=["text", "sql", "graph"],
         default="text",
-        help="answer from text search (default) or from the financial tables (Phase 3 SQL tool)",
+        help="answer from text search (default), the financial tables (Phase 3 SQL tool) "
+        "or the knowledge graph (Phase 3 graph tool)",
     )
     parser.add_argument("--types", help="only these question types, e.g. numeric,trend")
     args = parser.parse_args()
     setup_logging(get_settings().log_level)
-    if args.source == "sql" and args.retrieval_only:
+    if args.source != "text" and args.retrieval_only:
         parser.error("--retrieval-only applies to text search only")
 
     if not args.questions.exists():
@@ -69,12 +74,20 @@ def main() -> int:
     questions = questions[: args.limit]
 
     results: list[QuestionResult] = []
-    with connect() as conn, connect_reader() as reader:
+    graph = connect_graph() if args.source == "graph" else contextlib.nullcontext()
+    with connect() as conn, connect_reader() as reader, graph as driver:
 
         def answer_from_sql(_conn: object, question: str) -> Answer:
             return as_answer(answer_with_sql(reader, question))  # the read-only connection
 
-        answer_fn: AnswerFn = answer_from_sql if args.source == "sql" else answer_question
+        def answer_from_graph(_conn: object, question: str) -> Answer:
+            return as_answer(answer_with_graph(driver, question))
+
+        answer_fn: AnswerFn = {
+            "text": answer_question,
+            "sql": answer_from_sql,
+            "graph": answer_from_graph,
+        }[args.source]
         for i, q in enumerate(questions, start=1):
             try:
                 r = (
@@ -107,7 +120,7 @@ def main() -> int:
     summary = summarize(results)
     auto = [
         "retrieval only" if args.retrieval_only else "",
-        "source=sql" if args.source == "sql" else "",
+        f"source={args.source}" if args.source != "text" else "",
         f"types={args.types}" if args.types else "",
     ]
     notes = "; ".join(filter(None, [*auto, args.notes]))

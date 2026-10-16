@@ -108,7 +108,16 @@ Tables fixed the questions where the model had picked the wrong row (3.5 questio
 
 SQL fixes the "right page, wrong label" answers: the bank's total instead of a segment's, reported instead of adjusted, the restated prior year. Text search still wins "why" questions and facts only in the prose (BCE's exact headcount). Picking the right one per question is the job of the Phase 4 router. The second SQL run adds one prompt rule (in comparisons, return a row per company and year instead of picking the winner in SQL), which fixed the CET1 comparison it was written for.
 
-**Graph tool result (Phase 3):** the eval set has only two relationship questions, both about RBC's U.S. bank. The graph answered *"Which American bank does RBC own?"* (City National Bank, citing the subsidiaries table in all four reports) but not *"What is the name of RBC's U.S. commercial bank?"*: the graph knows each subsidiary's name and principal office, not what kind of business it is, so the model picked *RBC USA Holdco Corporation*. Text search gets both right. Two questions measure almost nothing; the graph's strengths (executives by year, ownership shares over time, segment changes) need questions of their own, which the owner adds.
+**Graph tool result (Phase 3):** the eval set has only two relationship questions, both about RBC's U.S. bank. The graph answered *"Which American bank does RBC own?"* (City National Bank, citing the subsidiaries table in all four reports) but not *"What is the name of RBC's U.S. commercial bank?"*: the graph knows each subsidiary's name and principal office, not what kind of business it is, so the model picked *RBC USA Holdco Corporation*. Text search gets both right.
+
+With 7 more relationship questions (executives, ownership shares, segment changes; n=9):
+
+| Source (same 9 questions) | Correctness | Tokens per question |
+|---------------------------|-------------|---------------------|
+| Text search (Phase 2 stack) | **0.83** | ~2,850 |
+| Graph tool | 0.56 | ~510 |
+
+The graph wins the one question that spans two reports (*"Who replaced Nadine Ahn as RBC's CFO?"*: text search refused). It loses where its query misses: the fast model writes different Cypher from run to run (Scotiabank's 2024 CFO and BCE's 2024 CEO/CFO came back empty in the eval but right when re-asked), sometimes leaves out the property asked about (ownership share), and declined the BCE segment question although segments are in the graph. So, like SQL for numbers, the graph is a complement for cross-year relationship questions, not a replacement; choosing per question is the Phase 4 router's job.
 
 **Where the Phase 2 stack still fails** (10 of 42 questions wrong, 2 partly right): mostly numbers whose right page *was* retrieved but whose label got lost, such as an *adjusted* figure reported instead of the *reported* one (Phase 3: tables), and comparisons that need two reports at once (Phase 4: agentic layer).
 

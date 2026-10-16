@@ -8,6 +8,7 @@ Usage:
     uv run python scripts/describe_figures.py --dry-run    # count candidates, no LLM calls
     uv run python scripts/describe_figures.py --limit 50   # describe at most 50 new pictures
     uv run python scripts/describe_figures.py              # describe everything still missing
+Exit code 0 once every candidate is described, 3 if some are left for a later run.
 """
 
 import argparse
@@ -66,6 +67,7 @@ def main() -> int:
     count_tokens = lambda text: len(embedding_tokenizer()(text))  # noqa: E731
     budget = args.limit
     stopped = None
+    left = 0  # candidates not described in this run
     with connect() as conn:
         reports = conn.execute("SELECT company, year FROM documents ORDER BY 1, 2").fetchall()
         for company, year in reports:
@@ -82,11 +84,13 @@ def main() -> int:
                 png = render_png(pdf, candidate.page, candidate.box)
                 is_cached = cache.get(cache_key(candidate, png)) is not None
                 if stopped or (not is_cached and budget is not None and budget <= 0):
+                    left += 1
                     continue  # leave it for the next run
                 try:
                     described.append((candidate, describe_with_retry(candidate, png, cache)))
                 except DailyLimitReached as err:
                     stopped = f"daily limit reached: {err}"
+                    left += 1
                     continue
                 if not is_cached and budget is not None:
                     budget -= 1
@@ -99,7 +103,10 @@ def main() -> int:
                 flush=True,
             )
     if stopped:
-        print(f"\nStopped early ({stopped[:200]}). Re-run tomorrow to describe the rest.")
+        print(f"\nStopped early ({stopped[:200]}).")
+    if left:
+        print(f"{left} candidates left; re-run later to describe them.")
+        return 3
     return 0
 
 

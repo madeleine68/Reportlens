@@ -378,3 +378,11 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 **Known limitation:** BCE's 2022 report has 1 candidate: its charts are images without a text layer, so the rule misses them.
 
 **Eval evidence:** none yet; a retrieval-only comparison (best stack, with and without figure chunks) waits until all reports are described.
+
+## 2026-10-16 — More eval questions; graph tool vs text search on relationship questions
+
+**Context:** The graph tool had only 2 relationship questions to be measured on, and no question depended on a chart. At the owner's request (the eval set is otherwise owner-only), Claude added q044–q054: 7 relationship questions (executives by year, a CFO change across reports, ownership shares, a segment change, a subsidiary's office) and 4 chart-only questions (BCE revenue split by segment, RBC Wealth Management AUM by client type, Scotiabank 2024 earnings by market, BCE gender-diverse directors).
+
+**How they were checked:** every answer and page list comes from searching the PDF text layer (and, for charts, looking at the rendered page), never from the graph or the chart summaries being tested. Chart questions were picked where the PDF text alone is ambiguous (BCE p7 prints "11% 10% 38% 38% 51% 52%" with no segment or year attached). **Bias to keep in mind:** Claude built the graph and chart tools before writing these questions, and q046 (Scotiabank Chile) was one of its trial questions for the graph tool.
+
+**Eval evidence (n=9, relationship):** text search (Phase 2 stack) correctness **0.83**, faithfulness 1.00, ~2,850 tokens per question; graph tool **0.56**, ~510 tokens. The graph won q045 (CFO change, needs two reports; text refused). It lost q044 and q048 to run-to-run variation in the Cypher (both right when re-asked), q046 because the query kept only 2022 and left out `ownership_pct`, and q047 because the model declined although segments are in the graph. Prompt fixes for these would be tuned on the eval set, so none were made; the router (Phase 4) can send relationship questions to text search by default and to the graph for changes across years. The chart questions wait until all charts are described.

@@ -74,6 +74,12 @@ class Settings(BaseSettings):
     sql_timeout_ms: int = 5000
     sql_row_limit: int = 50
 
+    # Phase 3 graph: Neo4j holds companies, segments, subsidiaries and executives.
+    neo4j_user: str = "neo4j"
+    neo4j_password: SecretStr = SecretStr("reportlens")
+    neo4j_host: str = "localhost"
+    neo4j_bolt_port: int = 7687
+
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"
 
@@ -88,6 +94,16 @@ class Settings(BaseSettings):
     def filter_cache_path(self) -> Path:
         """Cache of LLM-extracted metadata filters, keyed by model, prompt and question."""
         return self.data_dir / "cache" / "filters.json"
+
+    @property
+    def graph_cache_path(self) -> Path:
+        """Cache of LLM-extracted graph facts, keyed by model, prompt and source text."""
+        return self.data_dir / "cache" / "graph_facts.json"
+
+    @property
+    def neo4j_uri(self) -> str:
+        """Bolt address of the Neo4j server."""
+        return f"bolt://{self.neo4j_host}:{self.neo4j_bolt_port}"
 
     @property
     def parsed_dir(self) -> Path:

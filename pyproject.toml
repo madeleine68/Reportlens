@@ -17,6 +17,7 @@ dependencies = [
     "sentence-transformers>=5.7.0",
     "pgvector>=0.5.1",
     "sqlglot>=25",
+    "neo4j>=5.20",
 ]
 
 [dependency-groups]

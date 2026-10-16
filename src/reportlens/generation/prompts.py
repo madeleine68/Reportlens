@@ -84,3 +84,33 @@ Rows:
 {rows}
 
 Question: {question}"""
+
+# --- Phase 3: knowledge graph extraction (ingest/graph.py) -------------------------------------
+
+GRAPH_SUBSIDIARIES_SYSTEM = """You read the subsidiaries table from {company_name}'s {year} annual \
+report and list every subsidiary in it.
+
+Rules:
+- One entry per company named in the table. A cell may hold several names in a row (subsidiaries \
+held through the first one); list each of them separately, e.g. "BNS Investments Inc. 1832 Asset \
+Management L.P." is two companies.
+- The table was read from a PDF, so a name can be split across two rows (e.g. "Scotiabank" then \
+"Uruguay S.A."): join the pieces into one name, using the locations column as a guide.
+- name: exactly as printed, without footnote markers such as (1) or (2).
+- location: the principal office if the table gives one, else null.
+- ownership_pct: the percentage owned if the table prints one for that company (e.g. 100% or \
+"(97.39%)"), else null. Do not guess.
+- Skip headings such as "Canadian" or "International", and the column headers."""
+
+GRAPH_EXECUTIVES_SYSTEM = """You read short passages from {company_name}'s {year} annual report, \
+each marked with its page as [p. N], and list the company's own executive officers.
+
+Rules:
+- Include only people who hold an officer role at {company_name} itself or its group (e.g. \
+President and Chief Executive Officer, Chief Financial Officer, Group Head, Executive \
+Vice-President). Skip directors whose title is at another company, and roles mentioned without a \
+person's name.
+- name: the person's name as printed; title: their title as printed, without the company name.
+- role: 'ceo' for the chief executive, 'cfo' for the chief financial officer, else 'other'.
+- page: the [p. N] of a passage that names the person with that title.
+- List each person once."""

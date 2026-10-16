@@ -9,7 +9,7 @@ Question answering over Canadian public companies' annual reports, built to demo
 ```bash
 cp .env.example .env          # then add your free Groq API key
 uv sync
-docker compose up -d          # start Postgres + pgvector
+docker compose up -d          # start Postgres + pgvector, and Neo4j
 uv run pytest                 # fast tests (add -m slow for tests that run real models)
 
 # Put PDFs at data/raw/{company}/{year}.pdf, then:
@@ -22,6 +22,8 @@ PARSE_TABLES=true CHUNKING=tables POSTGRES_DB=reportlens_tables uv run python sc
 # Load every table number into Postgres for SQL, then build the financials table (needs the table parses above; takes seconds):
 uv run python scripts/load_tables.py
 uv run python scripts/check_financials.py   # compare financials with the eval set's expected numbers
+# Build the knowledge graph in Neo4j (two fast-LLM calls per report the first time, cached after):
+uv run python scripts/load_graph.py --show
 
 # Ask a question (from text search, or with --sql from the financial tables):
 uv run python scripts/ask.py "How many wireless subscribers did Bell have in 2024?"
@@ -35,7 +37,7 @@ uv run python scripts/ask.py --sql "Which bank had the higher CET1 ratio in 2024
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
-| 3. Structured data | Real tables, SQL tool, knowledge graph | 🟡 In progress: SQL tool built and measured (0.80 vs 0.67 on numeric questions); graph next |
+| 3. Structured data | Real tables, SQL tool, knowledge graph | 🟡 In progress: SQL tool built and measured (0.80 vs 0.67 on numeric questions); knowledge graph built; Cypher tool next |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
 | 5. Ship | API, UI, deployment | ⬜ Planned |
 
@@ -225,7 +227,9 @@ flowchart LR
     parse --> text[("Text chunks<br/>pgvector")]
     parse --> cells[("table_cells<br/>every number with its row,<br/>column, unit, year, page")]
     cells --> fin[("financials table<br/>12 headline metrics: company,<br/>year, scope, basis, value, page")]
-    parse --> kg[("Knowledge graph<br/>Neo4j: companies, segments,<br/>subsidiaries, executives")]
+    fin --> kg[("Knowledge graph<br/>Neo4j: companies, segments,<br/>subsidiaries, executives")]
+    parse --> extract["Fast LLM reads each report's<br/>subsidiaries table and<br/>officer signatures"]
+    extract --> kg
     q["Question"] --> sqltool["Text-to-SQL tool<br/>fast LLM writes one SELECT"]
     sqltool --> safety["Safety check (sqlglot)<br/>one SELECT, approved tables,<br/>row limit"]
     safety --> reader["Read-only role<br/>SELECT on 2 tables,<br/>5 s timeout"]
@@ -237,15 +241,21 @@ flowchart LR
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
-    class pdf,parse,text,cells,fin,q,sqltool,safety,reader,sqlans done
-    class kg,cypher planned
+    class pdf,parse,text,cells,fin,q,sqltool,safety,reader,sqlans,extract,kg done
+    class cypher planned
 ```
 
 - **Tables with structure** (`PARSE_TABLES=true`, `CHUNKING=tables`): Docling's table model is turned on, so each number keeps its row and column labels. Each table becomes its own chunk, starting with its section heading and header row; a table too big for one chunk is split between rows and every piece repeats the header. The table model crashes at random on this laptop's CPU, so each report is converted in 20-page slices, each in a fresh process with a timeout and up to 3 attempts (about 35–45 min per report). Table chunks live in their own database (`reportlens_tables`); measured above, they aren't the default.
 - **`table_cells`** (`ingest/tables.py`, `scripts/load_tables.py`): every number in every parsed table becomes one row, labelled with its row, its column header, its unit (millions, percent, dollars per share…), the year and kind of period it covers (full year, quarter, % change) and its page. Rules only, no LLM: 110,335 cells from 12 reports in seconds. Rows like "Reported Results" and "Adjusted Results" that head the rows below them are kept as a `row_group`, so the *reported* and *adjusted* net income no longer look alike. Footnote markers are stripped from labels, and when Docling takes a title row as the header, the real header row below it is merged in.
 - **`financials` table** (`ingest/financials.py`, metrics defined in `ingest/metrics.py`): 12 headline metrics (net income, EPS, CET1 ratio, revenue, capex, employees…), one row per company, year, report, **scope** (whole company or a segment such as *Canadian Banking*) and **basis** (reported or adjusted). The same figure is printed in several tables, so every matching cell votes and the most common value wins; the number of agreeing cells is kept as a confidence signal. Figures are kept per report because later reports sometimes restate the prior year. Checked against the eval set with `scripts/check_financials.py`: 29 of the 33 numeric questions' figures are in the table (the other 4 are a percentage change and a headcount printed only in the text).
 - **Text-to-SQL** (`sources/sql_tool.py`, `sources/sql_safety.py`; try it with `scripts/ask.py --sql "..."`): the fast LLM is told the two tables' columns, the 12 metrics and each company's segments, and writes one SELECT. Because LLM-written SQL is untrusted, there are three layers of protection: (1) the SQL is parsed with `sqlglot` and rejected unless it's a single SELECT on `financials`/`table_cells` with no risky functions, and a 50-row limit is added; (2) it runs as `reportlens_reader`, a Postgres role that can only SELECT those two tables, with a 5-second timeout; (3) the session itself is read-only and rolled back after each query. If the SQL is rejected or fails, the error goes back to the LLM for one more try. The main LLM then answers from the rows and cites each row's page. Example: *"What was Scotiabank's net income attributable to equity holders in fiscal 2023?"* → `... WHERE metric = 'net_income_to_shareholders' AND scope = 'total' AND basis = 'reported'` → "$7,410 million [page 22]".
-- **Knowledge graph:** relationships such as "which subsidiaries belong to which segment" are stored in Neo4j and queried with Cypher.
+- **Knowledge graph** (`ingest/graph.py`, `ingest/graph_names.py`, `ingest/graph_load.py`, `scripts/load_graph.py`): Neo4j holds who owns what and who runs what, for questions like *"Which American bank does RBC own?"* or *"Who was Scotiabank's CFO in 2024?"*.
+  - `(Company)-[:HAS_SEGMENT]->(Segment)` comes straight from `financials` (no LLM), so it shows BCE replacing Wireless and Wireline with Bell CTS in 2023.
+  - `(Company)-[:OWNS]->(Subsidiary)`: the fast LLM reads each report's subsidiaries table, 15 rows at a time. An LLM is needed because RBC prints a holding company and everything it owns in one cell. Ownership shares are kept when printed (Scotiabank Chile: 83.03% in 2021, 99.79% after the 2022 buyout).
+  - `(Executive)-[:HOLDS_ROLE]->(Company)`: the fast LLM reads only short passages that contain an officer title, such as the signatures under management's report. A name that no passage contains is thrown away, so the LLM can't invent an executive.
+  - Every relationship stores the report year and page, so graph answers can cite pages too, and changes over time are visible (RBC's CFO: Nadine Ahn → Katherine Gibson in 2024).
+  - Names are matched loosely ("David I. McKay" = "David McKay", "Scotiabank& Trust" = "Scotiabank & Trust"), and LLM output is cached, so rebuilding the graph is free.
+- **Cypher tool** (next): the LLM writes a read-only Cypher query, checked like the SQL tool's queries.
 
 ### Phase 4: Agentic layer ⬜
 

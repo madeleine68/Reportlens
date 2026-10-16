@@ -314,3 +314,26 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 **Decision:** keep the rule.
 
 **Eval evidence (n=33, numeric/trend/comparison):** correctness 0.79 → **0.80**, faithfulness 0.98 → **1.00**, ~500 main-model tokens per question. q028 (the CET1 comparison that motivated the rule) went 0 → 1, and q019 0.5 → 1; q014 and q034 went 1 → 0.5 on wording (one stated a restated prior-year figure, one omitted context the expected answer includes). So the rule fixes what it targeted, and the rest is run-to-run noise of about one question. The rule came from reading an eval result, so this number is tuned on this set. q039 hit the per-minute rate limit (the graph extraction was running at the same time) and was re-run alone.
+
+## 2026-10-16 — Knowledge graph: segments from financials, subsidiaries and executives extracted by the fast LLM
+
+**Context:** Phase 3 graph step. Relationship questions ("Which American bank does RBC own?", "Who was Scotiabank's CFO in 2024?") are poorly served by both text chunks and SQL. The graph needs Company, Segment, Subsidiary and Executive nodes, each relationship citable to a page like the other sources.
+
+**Options considered:**
+- **Rules over `table_cells`:** free, but `table_cells` only holds numeric cells (the principal-office column is lost), and RBC prints a holding company and the companies held through it in one cell ("RBC US Group Holdings LLC RBC USA Holdco Corporation RBC Capital Markets, LLC City National Bank"), which no rule can split reliably.
+- **LLM extraction over every chunk:** finds the most, but ~6,000 chunks would cost several days of the free tier's quota, and most chunks hold no relationships.
+- **LLM extraction over a few selected passages per report:** the subsidiaries table (picked by its heading) and the short blocks that pair a name with an officer title (signatures under management's report, leadership pages).
+
+**Decision:** the third, plus no LLM where the data already exists.
+- **Segments** come from `financials` (the segments each report has figures for, with the first page printing one), so the graph shows BCE moving from Wireless/Wireline to Bell CTS in 2023 and RBC splitting Personal & Commercial Banking.
+- **Subsidiaries:** the fast model reads each report's subsidiaries table in batches of 15 rows (header repeated) and returns name, location and ownership share; the page is the table's page.
+- **Executives:** the fast model reads ≤ 300-character passages that contain an officer title (≤ 60 per report, each marked `[p. N]`) and returns name, title, role (`ceo`/`cfo`/`other`) and page. A person no passage names is dropped, so a made-up name can't reach the graph; board members signing the statements ("Director") are dropped too.
+- **Names are matched by keys** (`ingest/graph_names.py`): case, punctuation, `&`/"and" and a leading "The" are ignored for companies, and middle initials for people ("David I. McKay" = "David McKay"). Footnote markers and printed shares ("(99.79%)") are stripped from names, and company names from the end of titles.
+- **Every relationship carries `report_year` and `source_page`** and appears once per report, so "in 2023" is a filter and changes over time (a new CFO) are visible. The graph is rebuilt from scratch on each load; LLM output is cached by model, prompt and input (`data/cache/graph_facts.json`), so rebuilding costs nothing.
+- **Neo4j 5 Community** runs in Docker next to Postgres. Community edition has no role-based access, so the Cypher tool (next step) will rely on read transactions, which the server refuses to write in, plus a query check, as the SQL tool does.
+
+**Provider issues found and fixed in `core/llm.py`:** Groq's JSON mode rejected some inputs every time (`json_validate_failed`) although the plain reply was valid JSON, so `structured()` now retries without JSON mode after a rejection (Pydantic still validates); this was probably also q036's failure. And Groq's default 2,048-token output cap cut off long lists from the reasoning model, so `chat()`/`structured()` take an optional `max_tokens` (extraction uses 6,000: prompt plus cap must stay under the 8,000 tokens-per-minute limit).
+
+**Known limitation:** the table parse of Scotiabank's 2023 subsidiaries table is garbled (names split across rows next to the wrong locations), so a few 2023 names are wrong, e.g. "Peru Holdings S.A."; one-word fragments such as "Scotia" are dropped by rule.
+
+**Eval evidence:** none yet. The eval set has two relationship questions (q027, q042: City National Bank), and the graph has City National Bank under RBC in all four reports (pages 229, 233, 234, 247). More relationship questions are needed to measure the Cypher tool (the owner adds them).

@@ -111,6 +111,30 @@ def test_structured_retries_when_provider_rejects_json(fake_client: MagicMock) -
     assert fake_client.chat.completions.create.call_count == 2
 
 
+def test_structured_retry_after_rejection_drops_json_mode(fake_client: MagicMock) -> None:
+    fake_client.chat.completions.create.side_effect = [
+        _json_rejected(),
+        _fake_completion('{"company": "RBC", "year": 2023}'),
+    ]
+
+    llm.structured([{"role": "user", "content": "RBC 2023"}], Filters)
+
+    first, second = fake_client.chat.completions.create.call_args_list
+    assert "response_format" in first.kwargs
+    assert "response_format" not in second.kwargs
+
+
+def test_chat_passes_max_tokens_only_when_set(fake_client: MagicMock) -> None:
+    fake_client.chat.completions.create.return_value = _fake_completion("hello")
+
+    llm.chat([{"role": "user", "content": "hi"}])
+    llm.chat([{"role": "user", "content": "hi"}], max_tokens=100)
+
+    first, second = fake_client.chat.completions.create.call_args_list
+    assert "max_tokens" not in first.kwargs
+    assert second.kwargs["max_tokens"] == 100
+
+
 def test_structured_does_not_retry_other_bad_requests(fake_client: MagicMock) -> None:
     fake_client.chat.completions.create.side_effect = _json_rejected(code="model_not_found")
 

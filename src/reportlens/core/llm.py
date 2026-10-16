@@ -50,10 +50,16 @@ def chat(
     tier: Tier = "main",
     temperature: float = 0.0,
     json_mode: bool = False,
+    max_tokens: int | None = None,
 ) -> LLMResponse:
-    """Send a chat completion and return the reply with usage stats."""
+    """Send a chat completion and return the reply with usage stats.
+
+    max_tokens caps the reply, reasoning included; None uses the provider's default.
+    """
     model = _model_for(tier)
-    extra = {"response_format": {"type": "json_object"}} if json_mode else {}
+    extra: dict = {"response_format": {"type": "json_object"}} if json_mode else {}
+    if max_tokens is not None:
+        extra["max_tokens"] = max_tokens
 
     start = time.perf_counter()
     resp = _client().chat.completions.create(
@@ -84,12 +90,14 @@ def structured[T: BaseModel](
     schema: type[T],
     tier: Tier = "fast",
     max_retries: int = 1,
+    max_tokens: int | None = None,
 ) -> T:
     """Ask for JSON matching `schema` and return a validated Pydantic object.
 
     Uses JSON mode (widely supported) plus Pydantic validation, retrying once with the
-    validation error fed back to the model. Also retries when the provider itself rejects
-    malformed JSON (Groq returns a 400 `json_validate_failed`).
+    validation error fed back to the model. When the provider itself rejects the reply (Groq
+    returns a 400 `json_validate_failed`), retries without JSON mode: some inputs fail Groq's
+    check every time while the plain reply is valid JSON, and Pydantic still validates it.
     """
     schema_json = json.dumps(schema.model_json_schema())
     system = {
@@ -97,14 +105,16 @@ def structured[T: BaseModel](
         "content": f"Respond only with a JSON object matching this JSON schema:\n{schema_json}",
     }
     convo = [system, *messages]
+    json_mode = True
 
     for attempt in range(max_retries + 1):
         try:
-            reply = chat(convo, tier=tier, json_mode=True)
+            reply = chat(convo, tier=tier, json_mode=json_mode, max_tokens=max_tokens)
         except BadRequestError as err:
             if err.code != "json_validate_failed" or attempt == max_retries:
                 raise
             log.warning("llm.structured provider rejected JSON (attempt %d)", attempt + 1)
+            json_mode = False
             continue
         try:
             return schema.model_validate_json(reply.text)

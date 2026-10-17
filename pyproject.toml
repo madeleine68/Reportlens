@@ -19,6 +19,9 @@ dependencies = [
     "sqlglot>=25",
     "neo4j>=5.20",
     "langgraph>=1.2.16",
+    "fastapi>=0.143.3",
+    "uvicorn[standard]>=0.54.0",
+    "psycopg-pool>=3.3.3",
 ]
 
 [dependency-groups]

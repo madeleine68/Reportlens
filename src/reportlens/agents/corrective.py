@@ -26,6 +26,7 @@ from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel
 
+from reportlens.agents.events import run_graph
 from reportlens.agents.router import Known
 from reportlens.core import llm
 from reportlens.core.config import get_settings
@@ -244,7 +245,7 @@ def answer_corrective(question: str, tools: Tools) -> CorrectiveAnswer:
     graph = build_graph(tools, settings.crag_max_rewrites)
     start: CragState = {"question": question, "query": question, "rewrites": 0, "path": []}
     try:
-        state = graph.invoke(start, {"recursion_limit": settings.agent_max_steps})
+        state = run_graph(graph, start, {"recursion_limit": settings.agent_max_steps}, "corrective")
     except GraphRecursionError:
         log.warning("corrective.step_limit steps=%d", settings.agent_max_steps)
         return CorrectiveAnswer(answer=refusal(question), path=["step limit reached"])

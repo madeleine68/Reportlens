@@ -470,3 +470,16 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 **Off by default (`SELF_RAG=false`):** the routed eval was already running when this was built, and each resumed run loads the current code; turning Self-RAG on would have changed the system mid-run. It gets its own routed run with `SELF_RAG=true` after the queued ones.
 
 **Eval evidence:** not yet measured. Live check: "Why did BCE's employee headcount change in 2024?" → routed to vector → check: supported (no revision). Cost: one ~3k-token fast-model check per answer with sources, plus a main-model revision when it fails.
+
+## 2026-10-17 — FastAPI: one answer shape, progress events instead of token streaming
+
+**Context:** Phase 5 asks for endpoints "with streaming" whose response includes the route taken, sources and pages. The LLM calls don't stream, and an answer is final only after citations are parsed and (with Self-RAG) it is checked.
+
+**Options considered:**
+- **Streaming:** token streaming of the final answer (needs a streaming `llm.chat`, citation parsing at the end, and is undone if Self-RAG revises the answer) vs **server-sent progress events**: `route` as soon as the router decides, `step` for each corrective RAG and Self-RAG step, then `answer` (the full JSON response) and `done`, or `error`.
+- **Getting steps out of the agents:** new callback parameters through every function vs **a ContextVar listener** (`agents/events.py`): `emit()` is a no-op unless the API set a listener for that thread, so the CLI, evals and tests are unchanged. The two graphs now run through `run_graph`, LangGraph's "values" stream, which gives the same final state as `invoke` and reports each new `path` entry.
+- **Connections:** one per request vs **a psycopg pool** (`psycopg-pool`, 1–4 connections; FastAPI runs sync endpoints in a thread pool, and a connection can't be shared between threads). The read-only SQL connection is opened per request, as in the CLI.
+
+**Decision:** progress events, the ContextVar listener and a pool. `GET /health`, `GET /meta`, `POST /ask` and `POST /ask/stream`, all returning one `AskResponse` (answer, found, route and reason, path, Self-RAG checks and verdict, SQL/Cypher query, citations with pages or URL, every chunk the answer saw, tokens, latency) for every source (`auto`, `text`, `corrective`, `sql`, `graph`). Embedding and reranking models load at startup. Errors: 422 for an empty or over-500-character question, 429 for LLM quota (daily vs per-minute), 503 for `source=graph` without Neo4j, 500 with a fixed message otherwise (details in the server log only). No authentication yet; needed before deploying.
+
+**Evidence:** 14 tests with FastAPI's test client and a stub answerer (no models, databases or quota). Live: the server starts (pool, Neo4j, models), `/health` → `{"postgres": true, "neo4j": true, ...}`, `/meta` lists bce, rbc, scotiabank and 2021–2024. A live `/ask` waits until the eval runs have finished with the shared quota.

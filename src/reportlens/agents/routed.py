@@ -17,6 +17,7 @@ from neo4j import Driver
 from pydantic import BaseModel
 
 from reportlens.agents.corrective import Tools, answer_corrective, crag_cache, default_tools
+from reportlens.agents.events import emit
 from reportlens.agents.router import Known, Route, route_question
 from reportlens.agents.self_rag import CheckTools, default_check_tools, self_check
 from reportlens.core import llm
@@ -120,6 +121,7 @@ def answer_routed(question: str, route: Route, answerers: dict[str, AnswerFn]) -
         if source not in answerers:
             continue
         path.append(source)
+        emit("step", stage="routed", text=f"asking {source}")
         if source == FALLBACK:
             answer = answerers[source](question)
         else:
@@ -145,7 +147,9 @@ def ask(
     check_tools: CheckTools | None = None,
 ) -> RoutedAnswer:
     """Route the question, answer it, and (with SELF_RAG=true) check the answer."""
-    routed = answer_routed(question, route_question(question, known, cache), answerers)
+    route = route_question(question, known, cache)
+    emit("route", source=route.source, reason=route.reason)
+    routed = answer_routed(question, route, answerers)
     if not get_settings().self_rag:
         return routed
     checked = self_check(routed.answer, check_tools or default_check_tools())

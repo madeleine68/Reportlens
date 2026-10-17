@@ -21,6 +21,7 @@ from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel
 
+from reportlens.agents.events import run_graph
 from reportlens.core import llm
 from reportlens.core.config import get_settings
 from reportlens.core.logging import get_logger
@@ -203,7 +204,7 @@ def self_check(answer: Answer, tools: CheckTools) -> CheckedAnswer:
     graph = build_graph(tools, settings.self_rag_max_revisions)
     start: SelfRagState = {"answer": answer, "revisions": 0, "path": []}
     try:
-        state = graph.invoke(start, {"recursion_limit": settings.agent_max_steps})
+        state = run_graph(graph, start, {"recursion_limit": settings.agent_max_steps}, "self-rag")
     except GraphRecursionError:
         log.warning("self_rag.step_limit steps=%d", settings.agent_max_steps)
         return CheckedAnswer(answer=answer, supported=None, path=["step limit reached"])

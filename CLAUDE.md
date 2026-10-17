@@ -62,10 +62,10 @@ reportlens/
 │   ├── ingest/           # parse.py, chunking.py, embed.py, load.py, tables.py, metrics.py, financials.py, graph.py, graph_names.py, graph_load.py, figures.py
 │   ├── retrieval/        # vector.py, keyword.py, hybrid.py, rerank.py, filters.py
 │   ├── sources/          # sql_tool.py, sql_safety.py, graph_tool.py, cypher_safety.py, web_tool.py (Tavily, off by default)
-│   ├── agents/           # router.py, routed.py (router + fallback), corrective.py (LangGraph), graph.py, self_rag.py
+│   ├── agents/           # router.py, routed.py (router + fallback), corrective.py, self_rag.py (LangGraph), events.py (progress for the API)
 │   ├── generation/       # answer.py (answers with page citations), prompts.py
 │   ├── evals/            # questions.py, metrics.py, judge.py, runner.py, routing.py (eval logic)
-│   └── api/              # main.py (FastAPI)
+│   └── api/              # main.py (FastAPI routes), service.py (answering, resources), schemas.py
 ├── evals/
 │   ├── questions.jsonl   # OWNED BY THE HUMAN, see rules below
 │   ├── questions.smoke.jsonl  # smoke test for the runner only; never recorded in results.md
@@ -104,7 +104,7 @@ uv run python evals/run_evals.py --name "corrective" --source corrective   # Pha
 uv run python evals/run_evals.py --name "corrective" --source corrective --resume   # continue a run stopped by the daily limit (exit 3)
 SELF_RAG=true uv run python scripts/ask.py --routed "Why did BCE's headcount change in 2024?"   # Phase 4: routed answer + Self-RAG check
 nohup caffeinate -i scripts/eval_loop.sh >> data/cache/evals_run.log 2>&1 &   # Phase 4 evals back to back, resuming after each daily limit
-uv run uvicorn reportlens.api.main:app --reload      # start API
+uv run uvicorn reportlens.api.main:app --reload      # Phase 5: start the API (docs at http://localhost:8000/docs; loads models at startup)
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
 uv run ruff check . && uv run ruff format .          # lint and format
@@ -161,7 +161,7 @@ Keep this section up to date when commands change.
 
 ### Phase 5: Ship
 
-- [ ] FastAPI endpoints with streaming; response includes route taken, sources and pages
+- [x] FastAPI endpoints with streaming; response includes route taken, sources and pages (`api/`: `/health`, `/meta`, `/ask`, `/ask/stream` (server-sent progress events: route, steps, answer, done/error; not token streaming); tested with stubs and started live (health and meta); no auth yet; see DECISIONS.md 2026-10-17)
 - [ ] Simple UI showing answer, route, sources and retrieved chunks
 - [ ] Deploy (API: Railway/Fly; DB: Neon/Supabase; graph: Neo4j AuraDB free)
 - [ ] README: architecture diagram, results table, design decisions, demo video link

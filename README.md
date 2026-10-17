@@ -39,7 +39,7 @@ uv run python scripts/ask.py --sql "Which bank had the higher CET1 ratio in 2024
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
 | 3. Structured data | Real tables, SQL tool, knowledge graph, chart summaries | 🟡 Nearly done: SQL tool (0.80 vs 0.67 on numeric questions) and graph tool built and measured; chart summaries being generated (~70 a day on the free tier) |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | 🟡 In progress: router (route accuracy 0.83) and web search built; corrective RAG built with LangGraph, not yet measured |
-| 5. Ship | API, UI, deployment | ⬜ Planned |
+| 5. Ship | API, UI, deployment | 🟡 In progress: API built (`/ask`, `/ask/stream` with progress events) |
 
 **Corpus so far:** 12 of 20 reports ingested (also parsed with tables) (BCE, RBC and Scotiabank, fiscal 2021–2024). TD and Shopify are downloaded but not yet ingested.
 
@@ -350,22 +350,53 @@ flowchart TD
   - **Its own prompt, not the eval judge's:** the check follows each sentence's citations, while the eval's faithfulness judge splits the whole answer into claims. Both use the fast model, so a gain in faithfulness is read with care; correctness and the revision rate matter more.
 - **Safety limits:** a maximum number of steps and clear error handling on every node, so the loop can't run forever.
 
-### Phase 5: Ship ⬜
+### Phase 5: Ship 🟡
 
 Makes the system usable by someone other than the developer.
 
 ```mermaid
 flowchart LR
     user["User"] --> ui["Simple web UI<br/>answer, route, sources,<br/>retrieved chunks"]
-    ui --> api["FastAPI<br/>streams the answer<br/>as it's written"]
+    ui --> api["FastAPI<br/>/ask and /ask/stream<br/>(progress events)"]
     api --> agent["Agentic RAG<br/>from Phase 4"]
     agent --> dbs[("Postgres + pgvector<br/>Neo4j")]
     api -.->|"deployed on"| cloud["Railway or Fly (API)<br/>Neon or Supabase (DB)<br/>Neo4j AuraDB (graph)"]
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
-    class user,ui,api,agent,dbs,cloud planned
+    classDef done fill:#d4edda,stroke:#28a745,color:#155724
+    class api,agent,dbs done
+    class user,ui,cloud planned
 ```
 
-- **API:** a FastAPI endpoint streams the answer, along with the route taken and the pages cited.
+- **API** (`api/main.py`, `api/service.py`, `api/schemas.py`; start it with `uv run uvicorn reportlens.api.main:app --reload`, docs at `http://localhost:8000/docs`):
+
+  | Endpoint | What it does |
+  |----------|--------------|
+  | `GET /health` | Postgres and Neo4j reachable? Web search and Self-RAG on? |
+  | `GET /meta` | Companies and years loaded, and the sources a question can ask for |
+  | `POST /ask` | `{"question": "...", "source": "auto"}` → the answer with the route, steps, citations (company, year, pages, or URL), every chunk the answer model saw, tokens and latency. `source` is `auto` (the router), `text`, `corrective`, `sql` or `graph` (SQL and graph answers include their query) |
+  | `POST /ask/stream` | The same, as server-sent events |
+
+  ```mermaid
+  sequenceDiagram
+      participant C as Client
+      participant A as FastAPI
+      participant W as Worker thread
+      C->>A: POST /ask/stream {question}
+      A->>W: answer the question
+      W-->>C: event: route (the router's pick, after ~1 s)
+      W-->>C: event: step (each corrective RAG / Self-RAG step)
+      W-->>C: event: answer (the full response, as /ask returns it)
+      W-->>C: event: done (or event: error with status 429/503/500)
+  ```
+
+  ```bash
+  curl -N -X POST localhost:8000/ask/stream -H 'content-type: application/json' \
+       -d '{"question": "How did RBC'"'"'s and Scotiabank'"'"'s dividends per share compare in 2024?"}'
+  ```
+
+  - **The stream reports progress, not tokens.** Citations are parsed and the answer is checked only when it is complete, and a question takes 20–60 s on a laptop CPU, so the useful part is seeing the route and each step as they happen. The agents report steps through `agents/events.py`, which does nothing unless the API is listening, so the CLI and the evals are unchanged.
+  - **Resources:** a small Postgres connection pool (a connection can't be shared between requests running in parallel), one Neo4j driver (if Neo4j is down, graph routes fall back to text search and `source=graph` returns 503), and the embedding and reranking models loaded at startup.
+  - **Errors:** an empty or over-500-character question → 422; out of LLM quota → 429 (saying daily or per-minute); any other error → 500 with a short message, details in the server log only. No authentication yet: it runs locally.
 - **UI:** a simple page showing the answer, its sources and the chunks it was built from, so you can see why it answered the way it did.
 - **Deploy:** hosted on free tiers.

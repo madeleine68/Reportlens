@@ -303,8 +303,7 @@ flowchart TD
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
     class q,router,vec,sql,kg,gen,out,web done
-    class grade done
-    class check planned
+    class grade,check done
 ```
 
 - **Router** (`agents/router.py`, `agents/routed.py`; try it with `scripts/ask.py --routed "..."`): the fast LLM picks one source with a one-line reason, from a short description of what each source is good at, taken from the Phase 3 evals (SQL for figures, trends and comparisons; the graph for officer, subsidiary and segment changes across years; text search for everything else and as the default; web for anything the reports don't cover; no lookup only to define a finance term). If SQL or the graph finds nothing, text search answers instead, and the answer reports the path taken (e.g. `sql -> vector`). If the router call itself fails, the question goes to text search. If a tool fails (a network or database error), text search answers too.
@@ -333,7 +332,22 @@ flowchart TD
   - **The answer model sees only relevant chunks.** That is the "corrective" part: a chunk about a different year or one business segment can't be mistaken for the answer.
   - **Fails open:** if grading fails, every chunk is kept; if rewriting fails, the same query is searched again. Each node's work is recorded, so the answer shows its path, e.g. `retrieve (5) -> grade 0/5 relevant -> rewrite: ... -> retrieve (5) -> grade 2/5 relevant, enough -> generate`.
   - **Step limit:** LangGraph stops a run after `AGENT_MAX_STEPS` (12; a normal run takes at most 6), and the question gets the refusal instead of looping.
-- **Self-RAG:** checks that the final answer is backed by its sources, and retries once if it isn't.
+- **Self-RAG** (`agents/self_rag.py`, a second LangGraph graph; off until measured, try it with `SELF_RAG=true scripts/ask.py --routed "..."`): after any source answers, the fast model reads the answer and the sources it was written from (text chunks, or SQL and graph rows) and lists the facts no cited source states. If there are any, the main model rewrites the answer from the same sources, told which claims to fix or drop, and the new answer is checked again.
+
+  ```mermaid
+  flowchart LR
+      a["Answer from the router<br/>(text, SQL, graph or web)"] --> skip{"has sources?"}
+      skip -->|"no: refusal or<br/>no-lookup answer"| out["Answer"]
+      skip -->|"yes"| check{"check<br/>fast LLM: does every cited<br/>source state its sentence's fact?"}
+      check -->|"supported"| out
+      check -->|"unsupported claims,<br/>no revision yet"| revise["revise<br/>main LLM rewrites from the<br/>same sources, fixing those claims"]
+      revise --> check
+      check -->|"still unsupported"| marked["Answer, marked unsupported"]
+  ```
+
+  - **"Is retrieval needed?"** is the router's `none` route, which answers finance-term questions without a lookup; a second call deciding the same thing would add cost and nothing else.
+  - **One revision at most** (`SELF_RAG_MAX_REVISIONS=1`). An answer that still fails is returned marked unsupported rather than refused, because the checker can be wrong too.
+  - **Its own prompt, not the eval judge's:** the check follows each sentence's citations, while the eval's faithfulness judge splits the whole answer into claims. Both use the fast model, so a gain in faithfulness is read with care; correctness and the revision rate matter more.
 - **Safety limits:** a maximum number of steps and clear error handling on every node, so the loop can't run forever.
 
 ### Phase 5: Ship ⬜

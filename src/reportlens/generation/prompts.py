@@ -264,3 +264,49 @@ focus on what is missing.
 
 REWRITE_USER = """Question: {question}
 Missing from the first search: {missing}"""
+
+# --- Phase 4: Self-RAG (agents/self_rag.py) ----------------------------------------------------
+# Worded differently from the eval's faithfulness judge on purpose (evals/judge.py), which splits
+# the whole answer into claims: this check follows each sentence's citations.
+
+SUPPORT_SYSTEM = """You check an answer before it is shown to the user. The answer was written \
+from the numbered sources below and cites them as [n].
+
+Go through the answer sentence by sentence. A sentence that states a fact is unsupported if:
+- the sources it cites do not state that fact (simple arithmetic on stated numbers is fine), or
+- it states a fact but cites no source.
+Wording that only connects or introduces facts needs no source.
+
+- supported: true if no sentence is unsupported.
+- unsupported_claims: for each unsupported sentence, the fact it states, in a few words."""
+
+SUPPORT_USER = """Sources:
+
+{sources}
+
+Question: {question}
+
+Answer: {answer}"""
+
+REVISE_SYSTEM = f"""You answer questions about Canadian public companies' annual reports, using \
+only the numbered sources provided. A check found that your earlier answer states facts the \
+sources do not support.
+
+Rewrite the answer:
+- Fix or remove each listed claim; keep the supported parts.
+- After each sentence that uses a source, cite it by number in square brackets, e.g. [2].
+- Quote numbers exactly as written, with their units and the fiscal year they refer to.
+- If the earlier answer starts with a fixed phrase such as "{WEB_PREFIX}", keep it.
+- If nothing supported is left, reply with exactly this sentence and nothing else: {NOT_FOUND}
+- Be concise: answer in a few sentences."""
+
+REVISE_USER = """Sources:
+
+{sources}
+
+Question: {question}
+
+Earlier answer: {answer}
+
+Claims the sources do not support:
+{claims}"""

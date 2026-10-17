@@ -6,7 +6,8 @@ gets the question. That keeps a wrong route or a broken tool from costing the an
 rightly declines "why" questions, for example.
 
 Text search here is corrective RAG (agents/corrective.py: grade the chunks, rewrite the query if
-they fall short) unless ROUTED_CORRECTIVE=false, which uses plain search.
+they fall short) unless ROUTED_CORRECTIVE=false, which uses plain search. With SELF_RAG=true the
+final answer is then checked against its sources and revised once if needed (agents/self_rag.py).
 """
 
 from collections.abc import Callable
@@ -17,6 +18,7 @@ from pydantic import BaseModel
 
 from reportlens.agents.corrective import Tools, answer_corrective, crag_cache, default_tools
 from reportlens.agents.router import Known, Route, route_question
+from reportlens.agents.self_rag import CheckTools, default_check_tools, self_check
 from reportlens.core import llm
 from reportlens.core.config import get_settings
 from reportlens.core.logging import get_logger
@@ -39,6 +41,8 @@ class RoutedAnswer(BaseModel):
     answer: Answer
     route: Route
     path: list[str]
+    checks: list[str] = []  # Self-RAG's steps, e.g. ["2 unsupported", "revise", "supported"]
+    supported: bool | None = None  # Self-RAG's verdict (None: not checked)
 
 
 def no_lookup_answer(question: str, chat: Callable[..., llm.LLMResponse] = llm.chat) -> Answer:
@@ -134,7 +138,17 @@ def answer_routed(question: str, route: Route, answerers: dict[str, AnswerFn]) -
 
 
 def ask(
-    question: str, known: Known, answerers: dict[str, AnswerFn], cache: FactCache | None = None
+    question: str,
+    known: Known,
+    answerers: dict[str, AnswerFn],
+    cache: FactCache | None = None,
+    check_tools: CheckTools | None = None,
 ) -> RoutedAnswer:
-    """Route the question, then answer it."""
-    return answer_routed(question, route_question(question, known, cache), answerers)
+    """Route the question, answer it, and (with SELF_RAG=true) check the answer."""
+    routed = answer_routed(question, route_question(question, known, cache), answerers)
+    if not get_settings().self_rag:
+        return routed
+    checked = self_check(routed.answer, check_tools or default_check_tools())
+    return routed.model_copy(
+        update={"answer": checked.answer, "checks": checked.path, "supported": checked.supported}
+    )

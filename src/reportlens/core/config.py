@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     agent_max_steps: int = 12
     # The router's text-search route (and its fallback) runs corrective RAG; false: plain search.
     routed_corrective: bool = True
+    # Phase 4 Self-RAG: the fast model checks each routed answer against its sources; if claims
+    # are unsupported, the main model revises it (at most this many times). Off until measured.
+    self_rag: bool = False
+    self_rag_max_revisions: int = 1
 
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"
@@ -130,6 +134,11 @@ class Settings(BaseSettings):
     def crag_cache_path(self) -> Path:
         """Cache of corrective RAG grades and rewrites, keyed by model, prompt and input."""
         return self.data_dir / "cache" / "corrective.json"
+
+    @property
+    def self_rag_cache_path(self) -> Path:
+        """Cache of Self-RAG support checks, keyed by model, prompt and answer."""
+        return self.data_dir / "cache" / "self_rag.json"
 
     @property
     def figure_cache_path(self) -> Path:

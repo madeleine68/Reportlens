@@ -15,6 +15,7 @@ from neo4j.exceptions import ServiceUnavailable
 from reportlens.agents.corrective import answer_corrective, crag_cache, default_tools
 from reportlens.agents.routed import ask, default_answerers
 from reportlens.agents.router import route_cache
+from reportlens.core import llm
 from reportlens.core.config import get_settings
 from reportlens.core.db import connect, connect_reader
 from reportlens.core.graph_db import connect_graph
@@ -102,6 +103,8 @@ def ask_routed(question: str) -> None:
     answer = routed.answer
     print(f"\nRoute: {routed.route.source} ({routed.route.reason})")
     print(f"Tried: {' -> '.join(routed.path)}")
+    if routed.checks:
+        print(f"Self-RAG: {' -> '.join(routed.checks)}")
     print(f"\n{answer.text}\n")
     for c in answer.citations:
         where = c.chunk_id if c.company == "web" else f"{c.company.upper()} {c.year}, "
@@ -122,4 +125,8 @@ def print_rows_answer(answer: RowsAnswer, query: str) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except llm.RateLimitError as err:
+        limit = "daily" if llm.is_daily_limit(err) else "per-minute"
+        raise SystemExit(f"Out of LLM quota ({limit} limit); try again later.") from None

@@ -454,3 +454,19 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 - The plain routed run (`ROUTED_CORRECTIVE=false`) was dropped from the queue: the text stack's best row (0.74) already gives the comparison point, and it would cost another ~3 days of quota.
 
 **Note:** the routed and corrective rows will be measured over several days. Answers and judge verdicts don't depend on the day, but latency may.
+
+## 2026-10-17 — Self-RAG: a support check after the router, one revision, off until measured
+
+**Context:** The Phase 4 checklist asks Self-RAG to (1) decide whether retrieval is needed and (2) check that the answer is supported, retrying once if not.
+
+**Options considered:**
+- **"Retrieval needed?":** a separate fast-model call vs **the router's `none` route**, which already makes that decision (measured within route accuracy). A second call would cost tokens and could disagree with the router.
+- **Check prompt:** reuse the eval's faithfulness judge prompt vs **a different prompt** (per-sentence: does each cited source state that sentence's fact?). Reusing the judge would optimise straight for the metric it is scored on.
+- **Still unsupported after the retry:** refuse vs **return it marked `supported=false`**. The checker uses the fast model and can be wrong; refusing would discard correct answers.
+- **Where it runs:** inside corrective RAG (text answers only) vs **after the router**, on whichever source answered. SQL and graph rows become pseudo-chunks (as for the eval judge), so one check covers every source.
+
+**Decision:** `agents/self_rag.py`, a LangGraph graph with `check` and `revise` nodes, run by `routed.ask()` after the router's answer. One revision at most (`SELF_RAG_MAX_REVISIONS=1`); the revised answer reuses the same sources, so citations re-parse against them, and its tokens are added to the answer's. Refusals and answers without sources skip the check (no cost). Check failures leave the answer as it was; rate limits are raised (as for corrective RAG). Checks are cached in `data/cache/self_rag.json`. The steps appear in the routed path (`check: 1 unsupported -> check: revise -> check: supported`).
+
+**Off by default (`SELF_RAG=false`):** the routed eval was already running when this was built, and each resumed run loads the current code; turning Self-RAG on would have changed the system mid-run. It gets its own routed run with `SELF_RAG=true` after the queued ones.
+
+**Eval evidence:** not yet measured. Live check: "Why did BCE's employee headcount change in 2024?" → routed to vector → check: supported (no revision). Cost: one ~3k-token fast-model check per answer with sources, plus a main-model revision when it fails.

@@ -120,7 +120,7 @@ def main() -> int:
 
         def answer_routed_fn(_conn: object, question: str) -> Answer:
             routed = ask(question, known_values(conn), answerers, route_cache())
-            routes[question] = " -> ".join(routed.path)
+            routes[question] = " -> ".join(routed.path + [f"check: {c}" for c in routed.checks])
             return routed.answer
 
         crag_tools = default_tools(conn, crag_cache()) if args.source == "corrective" else None

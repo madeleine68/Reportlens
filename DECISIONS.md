@@ -386,3 +386,20 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 **How they were checked:** every answer and page list comes from searching the PDF text layer (and, for charts, looking at the rendered page), never from the graph or the chart summaries being tested. Chart questions were picked where the PDF text alone is ambiguous (BCE p7 prints "11% 10% 38% 38% 51% 52%" with no segment or year attached). **Bias to keep in mind:** Claude built the graph and chart tools before writing these questions, and q046 (Scotiabank Chile) was one of its trial questions for the graph tool.
 
 **Eval evidence (n=9, relationship):** text search (Phase 2 stack) correctness **0.83**, faithfulness 1.00, ~2,850 tokens per question; graph tool **0.56**, ~510 tokens. The graph won q045 (CFO change, needs two reports; text refused). It lost q044 and q048 to run-to-run variation in the Cypher (both right when re-asked), q046 because the query kept only 2022 and left out `ownership_pct`, and q047 because the model declined although segments are in the graph. Prompt fixes for these would be tuned on the eval set, so none were made; the router (Phase 4) can send relationship questions to text search by default and to the graph for changes across years. The chart questions wait until all charts are described.
+
+## 2026-10-16 — Router: one fast-LLM call per question, text search as default and fallback
+
+**Context:** First Phase 4 piece. The owner asked Claude to write the router (listed as owner-written in CLAUDE.md). Phase 3 showed that no single source wins: SQL beats text on figures (0.80 vs 0.67, n=33), text beats the graph on relationship questions (0.83 vs 0.56, n=9) but the graph wins changes across reports.
+
+**Options considered:**
+- **Keyword rules** ("net income", "CFO", "why"): free and predictable, but brittle on paraphrases, which the eval set deliberately includes.
+- **Embedding similarity to example questions per route:** cheap, but needs a labelled set larger than the eval set and would be fitted to it.
+- **An LLM classifier with a short description of each source:** one ~700-token fast-model call per question, easy to explain and change.
+
+**Decision:** the LLM classifier, made safe by defaults.
+- The fast model returns `Route {source, reason}` (`vector | sql | graph | web | none`), cached by model, prompt and question like the metadata filters, so eval runs are repeatable.
+- **Text search is the default and the fallback:** "when unsure, pick vector" in the prompt; a router error routes to vector; when SQL or the graph finds nothing (no rows, or the answer model says the rows don't answer it), text search answers, and the tokens of both attempts are counted. A wrong route therefore costs tokens, rarely the answer.
+- **`none` only defines finance terms:** in the first route-accuracy run the router sent an unrelated question (out of corpus) to `none`, which would have answered it from the model's own knowledge. The prompt now limits `none` to defining a general finance or accounting term, and the no-lookup answer itself refuses anything else (and a refusal falls back to text search, which refuses out-of-corpus questions). This was found on the eval set, but it is a scope rule (answers come only from the reports), not a tuning of scores.
+- **`web` goes to text search** until the web tool exists.
+
+**Eval evidence (route accuracy, `evals/route_accuracy.py`):** on the 42 questions scored by at least two sources (best recorded run of each), the router picks a best-scoring source for 35 (**0.83**); always-vector gets 30 (0.71), always-SQL 28 (0.67). After the `none` fix all 3 out-of-corpus questions route to `web`. Misses: q004/q023/q040 sent to SQL where text search was better (BCE's exact headcount is only in the text), q044/q046/q049 sent to the graph or SQL where text search answered, and q045 (CFO change) sent to text search, where the graph was right. The answer-level routed eval (all 53 questions) needs most of a day's quota and runs separately.

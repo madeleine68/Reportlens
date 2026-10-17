@@ -5,6 +5,7 @@ Usage:
     uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.jsonl
     uv run python evals/run_evals.py --name "sql tool" --source sql --types numeric,trend,comparison
     uv run python evals/run_evals.py --name "graph tool" --source graph --types relationship
+    uv run python evals/run_evals.py --name "router" --source routed   # Phase 4 router
 
 Per-question details go to evals/runs/{date}-{name}.jsonl. A summary row is appended to
 evals/results.md only when running the real eval set (evals/questions.jsonl).
@@ -13,10 +14,13 @@ evals/results.md only when running the real eval set (evals/questions.jsonl).
 import argparse
 import contextlib
 import datetime as dt
+import json
 import re
 import sys
 from pathlib import Path
 
+from reportlens.agents.routed import ask, default_answerers
+from reportlens.agents.router import route_cache
 from reportlens.core.config import get_settings
 from reportlens.core.db import connect, connect_reader
 from reportlens.core.graph_db import connect_graph
@@ -31,6 +35,7 @@ from reportlens.evals.runner import (
     summarize,
 )
 from reportlens.generation.answer import Answer, answer_question
+from reportlens.retrieval.filters import known_values
 from reportlens.sources.graph_tool import answer_with_graph
 from reportlens.sources.sql_tool import answer_with_sql, as_answer
 
@@ -53,10 +58,10 @@ def main() -> int:
     )
     parser.add_argument(
         "--source",
-        choices=["text", "sql", "graph"],
+        choices=["text", "sql", "graph", "routed"],
         default="text",
         help="answer from text search (default), the financial tables (Phase 3 SQL tool) "
-        "or the knowledge graph (Phase 3 graph tool)",
+        "the knowledge graph (Phase 3 graph tool) or whichever the router picks (Phase 4)",
     )
     parser.add_argument("--types", help="only these question types, e.g. numeric,trend")
     args = parser.parse_args()
@@ -74,7 +79,9 @@ def main() -> int:
     questions = questions[: args.limit]
 
     results: list[QuestionResult] = []
-    graph = connect_graph() if args.source == "graph" else contextlib.nullcontext()
+    uses_graph = args.source in ("graph", "routed")
+    graph = connect_graph() if uses_graph else contextlib.nullcontext()
+    routes: dict[str, str] = {}  # question id -> sources tried, for --source routed
     with connect() as conn, connect_reader() as reader, graph as driver:
 
         def answer_from_sql(_conn: object, question: str) -> Answer:
@@ -83,10 +90,17 @@ def main() -> int:
         def answer_from_graph(_conn: object, question: str) -> Answer:
             return as_answer(answer_with_graph(driver, question))
 
+        def answer_routed_fn(_conn: object, question: str) -> Answer:
+            answerers = default_answerers(conn, reader, driver)
+            routed = ask(question, known_values(conn), answerers, route_cache())
+            routes[question] = " -> ".join(routed.path)
+            return routed.answer
+
         answer_fn: AnswerFn = {
             "text": answer_question,
             "sql": answer_from_sql,
             "graph": answer_from_graph,
+            "routed": answer_routed_fn,
         }[args.source]
         for i, q in enumerate(questions, start=1):
             try:
@@ -109,13 +123,17 @@ def main() -> int:
                 if args.retrieval_only
                 else f"correct={r.correctness} recall={r.recall} faithful={r.faithfulness}"
             )
-            print(f"[{i}/{len(questions)}] {q.id}: {status}", flush=True)
+            route = f" route={routes[q.question]}" if q.question in routes else ""
+            print(f"[{i}/{len(questions)}] {q.id}: {status}{route}", flush=True)
 
     today = dt.date.today().isoformat()
     RUNS_DIR.mkdir(exist_ok=True)
     slug = re.sub(r"[^a-z0-9]+", "-", args.name.lower()).strip("-")
     run_path = RUNS_DIR / f"{today}-{slug}.jsonl"
     run_path.write_text("".join(r.model_dump_json() + "\n" for r in results))
+    if routes:  # which sources answered each question, next to the run's details
+        by_id = {r.id: routes.get(r.question) for r in results}
+        run_path.with_suffix(".routes.json").write_text(json.dumps(by_id, indent=1))
 
     summary = summarize(results)
     auto = [

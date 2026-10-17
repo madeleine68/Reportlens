@@ -62,9 +62,9 @@ reportlens/
 │   ├── ingest/           # parse.py, chunking.py, embed.py, load.py, tables.py, metrics.py, financials.py, graph.py, graph_names.py, graph_load.py, figures.py
 │   ├── retrieval/        # vector.py, keyword.py, hybrid.py, rerank.py, filters.py
 │   ├── sources/          # sql_tool.py, sql_safety.py, graph_tool.py, cypher_safety.py, web_tool.py
-│   ├── agents/           # graph.py, router.py, self_rag.py, corrective.py
+│   ├── agents/           # router.py, routed.py (router + fallback), graph.py, self_rag.py, corrective.py
 │   ├── generation/       # answer.py (answers with page citations), prompts.py
-│   ├── evals/            # questions.py, metrics.py, judge.py, runner.py (eval logic)
+│   ├── evals/            # questions.py, metrics.py, judge.py, runner.py, routing.py (eval logic)
 │   └── api/              # main.py (FastAPI)
 ├── evals/
 │   ├── questions.jsonl   # OWNED BY THE HUMAN, see rules below
@@ -95,6 +95,9 @@ uv run python evals/run_evals.py --name smoke --questions evals/questions.smoke.
 uv run python evals/run_evals.py --name "x" --retrieval-only    # recall/MRR only, no answer model (cheap)
 uv run python evals/run_evals.py --name "sql" --source sql --types numeric,trend,comparison  # Phase 3 SQL tool
 uv run python evals/run_evals.py --name "graph" --source graph --types relationship  # Phase 3 graph tool
+uv run python evals/route_accuracy.py                # Phase 4: router picks vs the best source per question (fast model only)
+uv run python evals/run_evals.py --name "routed" --source routed   # Phase 4: answer via the router (needs a day's quota)
+uv run python scripts/ask.py --routed "Who replaced Nadine Ahn as RBC's CFO?"   # Phase 4: ask via the router
 uv run uvicorn reportlens.api.main:app --reload      # start API
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
@@ -105,7 +108,7 @@ Keep this section up to date when commands change.
 
 ## Phase plan
 
-**Current phase: 3** (update this line as phases complete)
+**Current phase: 4** (Phase 3 complete except chart descriptions, which a background loop is finishing at ~70/day; update this line as phases complete)
 
 ### Phase 0: Setup
 
@@ -144,7 +147,7 @@ Keep this section up to date when commands change.
 
 ### Phase 4: Agentic layer
 
-- [ ] LangGraph state graph; router node picks `vector | sql | graph | web | none` (**human writes the router**)
+- [ ] LangGraph state graph; router node picks `vector | sql | graph | web | none` (router written by Claude at the owner's request on 2026-10-16: `agents/router.py` + `agents/routed.py` with fallback to vector; route accuracy 0.83 vs 0.71 for always-vector; LangGraph not started; full routed eval pending)
 - [ ] Self-RAG: decide if retrieval is needed; after answering, check the answer is supported and retry once if not
 - [ ] Corrective RAG: grade retrieved chunks; if weak, rewrite the query and retry, then fall back to Tavily
 - [ ] Multi-step questions (e.g. comparing companies across SQL and text)
@@ -184,7 +187,7 @@ These are the parts I will write myself so I can explain them in interviews. You
 
 - `evals/questions.jsonl`: never add, edit or delete questions
 - The RRF merge function in `retrieval/hybrid.py` (owner asked Claude to write it on 2026-10-09; owner to review and be able to explain it)
-- The router logic in `agents/router.py`
+- The router logic in `agents/router.py` (owner asked Claude to write it on 2026-10-16; owner to review and be able to explain it)
 
 ### Code conventions
 

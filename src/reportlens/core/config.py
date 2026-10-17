@@ -107,6 +107,11 @@ class Settings(BaseSettings):
         return self.data_dir / "cache" / "graph_facts.json"
 
     @property
+    def route_cache_path(self) -> Path:
+        """Cache of router decisions, keyed by model, prompt and question."""
+        return self.data_dir / "cache" / "routes.json"
+
+    @property
     def figure_cache_path(self) -> Path:
         """Cache of vision-model chart summaries, keyed by model, prompt and image."""
         return self.data_dir / "cache" / "figures.json"

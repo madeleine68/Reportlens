@@ -275,13 +275,13 @@ flowchart LR
   - Names are matched loosely ("David I. McKay" = "David McKay", "Scotiabank& Trust" = "Scotiabank & Trust"), and LLM output is cached, so rebuilding the graph is free.
 - **Graph query tool** (`sources/graph_tool.py`, `sources/cypher_safety.py`; try it with `scripts/ask.py --graph "..."`): the same steps as the SQL tool. The fast LLM is told the graph's labels, relationships and company ids and writes one Cypher query, which must return each relationship's company, report year and page so the answer can cite it. Neo4j Community has no read-only users, so there are two layers of protection: (1) a check on the query's text (with strings and comments blanked out first) allows only read clauses, rejects `CALL` (procedures), `LOAD CSV` (reads files and URLs), `USE` (other databases) and `apoc.*`/`dbms.*` functions, allows only the graph's 4 labels and 3 relationship types, and adds a 50-row limit; (2) the query runs in a read transaction, which the server refuses to write in, with a 5-second timeout, and only the first 50 rows are fetched. A rejected or failing query goes back to the LLM with the reason. Example: *"How did RBC's CFO change over the years?"* → `MATCH (e:Executive)-[r:HOLDS_ROLE]->(c:Company {id:'rbc'}) WHERE r.role = 'cfo' ...` → "Nadine Ahn in 2021 [1], 2022 [2] and 2023 [3]. In 2024 the CFO changed to Katherine Gibson [4]."
 
-### Phase 4: Agentic layer ⬜
+### Phase 4: Agentic layer 🟡
 
 A router decides which source fits each question, and two self-checking loops catch weak retrieval and unsupported answers.
 
 ```mermaid
 flowchart TD
-    q["Question"] --> router{"Router<br/>which source fits?"}
+    q["Question"] --> router{"Router<br/>fast LLM picks a source<br/>(cached per question)"}
     router -->|"text question"| vec["Vector search"]
     router -->|"numbers"| sql["SQL tool"]
     router -->|"relationships"| kg["Graph tool"]
@@ -293,16 +293,21 @@ flowchart TD
     grade -->|"still no"| web
     sql --> gen
     kg --> gen
+    sql -->|"nothing found"| vec
+    kg -->|"nothing found"| vec
     web --> gen
     gen --> check{"Self-RAG<br/>is the answer supported<br/>by the sources?"}
     check -->|"yes"| out["Answer + route taken<br/>+ sources"]
     check -->|"no: retry once"| gen
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
-    class q,router,vec,sql,kg,web,grade,gen,check,out planned
+    classDef done fill:#d4edda,stroke:#28a745,color:#155724
+    class q,router,vec,sql,kg,gen,out done
+    class web,grade,check planned
 ```
 
-- **Router:** picks vector, SQL, graph, web or no lookup, based on the question.
+- **Router** (`agents/router.py`, `agents/routed.py`; try it with `scripts/ask.py --routed "..."`): the fast LLM picks one source with a one-line reason, from a short description of what each source is good at, taken from the Phase 3 evals (SQL for figures, trends and comparisons; the graph for officer, subsidiary and segment changes across years; text search for everything else and as the default; web for anything the reports don't cover; no lookup only to define a finance term). If SQL or the graph finds nothing, text search answers instead, and the answer reports the path taken (e.g. `sql -> vector`). If the router call itself fails, the question goes to text search. There is no web tool yet, so web questions go to text search, which refuses them.
+  - **Route accuracy** (`evals/route_accuracy.py`, fast-model calls only): on the 42 questions that already have scores from two or more sources, the router picks a best-scoring source for **35 (0.83)**, against 30 for always using text search and 28 for always using SQL. Its misses: BCE's exact headcount (only in the text, but it looks like a SQL figure), two relationship questions sent to the graph or SQL that text search answered, and the CFO-change question, which it sent to text search instead of the graph.
 - **Corrective RAG:** grades the retrieved chunks. If they're weak, it rewrites the query and tries again, then falls back to web search.
 - **Self-RAG:** checks that the final answer is backed by its sources, and retries once if it isn't.
 - **Safety limits:** a maximum number of steps and clear error handling on every node, so the loop can't run forever.

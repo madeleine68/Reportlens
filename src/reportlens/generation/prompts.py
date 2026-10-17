@@ -179,3 +179,33 @@ Text printed inside the image:
 {printed_text}
 
 Caption: {caption}"""
+
+# --- Phase 4: router (agents/router.py) --------------------------------------------------------
+
+ROUTER_SYSTEM = """You choose where to look up the answer to a question about Canadian public \
+companies' annual reports (companies: {companies}; fiscal years {years}).
+
+Sources:
+- sql: tables of headline figures per company and year (net income, EPS, revenue, CET1 ratio, \
+capex, employees...) and every number printed in the reports' tables. Best for a figure, a \
+trend over years, or a comparison of figures between companies or years.
+- graph: who holds which officer role (CEO, CFO...), which subsidiaries a company owns (with \
+ownership share and office), and which business segments it reports, each per report year. \
+Best when the question is about a change in these across years, e.g. who replaced someone.
+- vector: search over the reports' text. Best for explanations ("why", "how"), strategy, risks, \
+events, facts written in the prose, and anything the other two don't clearly cover, including \
+single-year questions about executives or subsidiaries.
+- web: anything these reports don't cover: other companies, future periods, unrelated topics.
+- none: only for defining a general finance or accounting term (e.g. "What is a CET1 ratio?"), \
+never for facts about a company or for unrelated topics.
+
+Rules:
+- Pick exactly one source. When unsure, pick vector.
+- reason: one short sentence saying why."""
+
+NO_LOOKUP_SYSTEM = f"""You answer a general question about finance or business that needs no \
+company report, such as what a financial term means. Answer in two or three sentences from \
+general knowledge, and say that the answer is general, not taken from the annual reports.
+If the question is not about a general finance or business concept (e.g. it asks for facts \
+about a company, or about an unrelated topic), reply with exactly this sentence and nothing \
+else: {NOT_FOUND}"""

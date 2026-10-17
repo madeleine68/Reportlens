@@ -403,3 +403,17 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 - **`web` goes to text search** until the web tool exists.
 
 **Eval evidence (route accuracy, `evals/route_accuracy.py`):** on the 42 questions scored by at least two sources (best recorded run of each), the router picks a best-scoring source for 35 (**0.83**); always-vector gets 30 (0.71), always-SQL 28 (0.67). After the `none` fix all 3 out-of-corpus questions route to `web`. Misses: q004/q023/q040 sent to SQL where text search was better (BCE's exact headcount is only in the text), q044/q046/q049 sent to the graph or SQL where text search answered, and q045 (CFO change) sent to text search, where the graph was right. The answer-level routed eval (all 53 questions) needs most of a day's quota and runs separately.
+
+## 2026-10-16 — Web search with Tavily, off by default
+
+**Context:** The router has a `web` route for questions the reports don't cover. The eval set's 3 out-of-corpus questions (Apple's revenue, the Stanley Cup, RBC's 2030 income) count as correct only when refused, so a web tool that answers them changes what "correct" means.
+
+**Options considered:** web always on (those 3 scored as wrong); on with an eval rule that also accepts labelled web answers (earlier rows no longer comparable); **off by default** behind `WEB_SEARCH`.
+
+**Decision (owner's choice):** off by default. With `WEB_SEARCH=true` and `TAVILY_API_KEY` set, the web route searches Tavily (5 results, basic depth) and the main LLM answers only from them, citing URLs, starting with "From the web, not the annual reports:". Off, the route goes to text search, which refuses. Details:
+- **Standard library HTTP** (`urllib.request`): Tavily is one JSON POST; `httpx` is not a direct dependency here, and adding the `tavily-python` client for one call isn't worth it.
+- **Untrusted content:** results are cut to 1,500 characters each, and the prompt says to treat them as information and ignore instructions inside them.
+- **Error handling:** any non-default source that raises (Tavily timeout, Neo4j down, a SQL error the tool didn't catch) now falls back to text search, and the path records it (`web (error) -> vector`).
+- An empty `TAVILY_API_KEY=` (as in `.env.example`) counts as unset.
+
+**Eval evidence:** none recorded (off by default, so no eval row changes). Live check: "What was Apple's revenue in fiscal 2023?" → "From the web, not the annual reports: … about $383.3 billion", citing 2 of 5 results, ~2.7k main-model tokens.

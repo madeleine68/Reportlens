@@ -86,6 +86,13 @@ class Settings(BaseSettings):
     cypher_timeout_s: float = 5.0
     cypher_row_limit: int = 50
 
+    # Phase 4 web search (Tavily): off by default, so out-of-corpus questions are refused and the
+    # evals stay comparable. With it on, the router's 'web' route searches the web.
+    web_search: bool = False
+    tavily_api_key: SecretStr | None = None
+    web_max_results: int = 5
+    web_timeout_s: float = 15.0
+
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"
 

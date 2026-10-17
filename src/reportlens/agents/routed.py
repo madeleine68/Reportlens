@@ -1,8 +1,9 @@
 """Answer a question from the source the router picks, falling back to text search (Phase 4).
 
-SQL and the graph answer only what their tables hold; when they find nothing (no rows, or the
-answer model says the rows don't answer it), text search gets the question. That keeps a wrong
-route from costing the answer: SQL rightly declines "why" questions, for example.
+SQL, the graph and the web answer only what they hold; when they find nothing (no rows, or the
+answer model says the rows don't answer it) or fail (a network or database error), text search
+gets the question. That keeps a wrong route or a broken tool from costing the answer: SQL
+rightly declines "why" questions, for example.
 """
 
 from collections.abc import Callable
@@ -13,11 +14,15 @@ from pydantic import BaseModel
 
 from reportlens.agents.router import Known, Route, route_question
 from reportlens.core import llm
+from reportlens.core.logging import get_logger
 from reportlens.generation import prompts
 from reportlens.generation.answer import Answer, answer_question, is_not_found
 from reportlens.ingest.graph import FactCache
 from reportlens.sources.graph_tool import answer_with_graph
 from reportlens.sources.sql_tool import answer_with_sql, as_answer
+from reportlens.sources.web_tool import answer_with_web, web_enabled
+
+log = get_logger(__name__)
 
 AnswerFn = Callable[[str], Answer]
 FALLBACK = "vector"
@@ -57,15 +62,17 @@ def no_lookup_answer(question: str, chat: Callable[..., llm.LLMResponse] = llm.c
 def default_answerers(
     conn: psycopg.Connection, reader: psycopg.Connection, driver: Driver | None
 ) -> dict[str, AnswerFn]:
-    """One answer function per source. Web has no tool yet, so it uses text search."""
+    """One answer function per source. Web search is off unless WEB_SEARCH=true: then text
+    search, which refuses out-of-corpus questions, takes the 'web' route."""
     answerers: dict[str, AnswerFn] = {
         "vector": lambda q: answer_question(conn, q),
-        "web": lambda q: answer_question(conn, q),  # Phase 4 web tool not built yet
         "sql": lambda q: as_answer(answer_with_sql(reader, q)),
         "none": no_lookup_answer,
     }
     if driver is not None:
         answerers["graph"] = lambda q: as_answer(answer_with_graph(driver, q))
+    if web_enabled():
+        answerers["web"] = answer_with_web
     return answerers
 
 
@@ -87,7 +94,15 @@ def answer_routed(question: str, route: Route, answerers: dict[str, AnswerFn]) -
         if source not in answerers:
             continue
         path.append(source)
-        answer = answerers[source](question)
+        if source == FALLBACK:
+            answer = answerers[source](question)
+        else:
+            try:
+                answer = answerers[source](question)
+            except Exception as err:  # noqa: BLE001  # a broken tool falls back to text search
+                log.warning("routed.source_failed source=%s error=%s", source, err)
+                path[-1] = f"{source} (error)"
+                continue
         if answer.found or source == FALLBACK:
             return RoutedAnswer(answer=_add_costs(answer, attempts), route=route, path=path)
         attempts.append(answer)

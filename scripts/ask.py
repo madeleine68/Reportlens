@@ -94,7 +94,8 @@ def ask_routed(question: str) -> None:
     print(f"Tried: {' -> '.join(routed.path)}")
     print(f"\n{answer.text}\n")
     for c in answer.citations:
-        print(f"  [{c.number}] {c.company.upper()} {c.year}, {format_pages(c.pages)}")
+        where = c.chunk_id if c.company == "web" else f"{c.company.upper()} {c.year}, "
+        print(f"  [{c.number}] {where}{'' if c.company == 'web' else format_pages(c.pages)}")
     print(f"\n({answer.input_tokens} in / {answer.output_tokens} out main-model tokens)")
 
 

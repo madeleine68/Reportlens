@@ -61,7 +61,7 @@ reportlens/
 │   ├── core/             # config.py (pydantic-settings), llm.py, db.py, graph_db.py, logging.py
 │   ├── ingest/           # parse.py, chunking.py, embed.py, load.py, tables.py, metrics.py, financials.py, graph.py, graph_names.py, graph_load.py, figures.py
 │   ├── retrieval/        # vector.py, keyword.py, hybrid.py, rerank.py, filters.py
-│   ├── sources/          # sql_tool.py, sql_safety.py, graph_tool.py, cypher_safety.py, web_tool.py
+│   ├── sources/          # sql_tool.py, sql_safety.py, graph_tool.py, cypher_safety.py, web_tool.py (Tavily, off by default)
 │   ├── agents/           # router.py, routed.py (router + fallback), graph.py, self_rag.py, corrective.py
 │   ├── generation/       # answer.py (answers with page citations), prompts.py
 │   ├── evals/            # questions.py, metrics.py, judge.py, runner.py, routing.py (eval logic)
@@ -98,6 +98,7 @@ uv run python evals/run_evals.py --name "graph" --source graph --types relations
 uv run python evals/route_accuracy.py                # Phase 4: router picks vs the best source per question (fast model only)
 uv run python evals/run_evals.py --name "routed" --source routed   # Phase 4: answer via the router (needs a day's quota)
 uv run python scripts/ask.py --routed "Who replaced Nadine Ahn as RBC's CFO?"   # Phase 4: ask via the router
+WEB_SEARCH=true uv run python scripts/ask.py --routed "What was Apple's revenue in 2023?"   # Phase 4: web route (needs TAVILY_API_KEY)
 uv run uvicorn reportlens.api.main:app --reload      # start API
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
@@ -151,7 +152,7 @@ Keep this section up to date when commands change.
 - [ ] Self-RAG: decide if retrieval is needed; after answering, check the answer is supported and retry once if not
 - [ ] Corrective RAG: grade retrieved chunks; if weak, rewrite the query and retry, then fall back to Tavily
 - [ ] Multi-step questions (e.g. comparing companies across SQL and text)
-- [ ] Max-step limit and clear error handling on every node
+- [ ] Max-step limit and clear error handling on every node (routed answers: a source that raises falls back to text search; LangGraph step limit not built)
 
 ### Phase 5: Ship
 

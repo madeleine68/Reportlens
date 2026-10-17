@@ -483,3 +483,13 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 **Decision:** progress events, the ContextVar listener and a pool. `GET /health`, `GET /meta`, `POST /ask` and `POST /ask/stream`, all returning one `AskResponse` (answer, found, route and reason, path, Self-RAG checks and verdict, SQL/Cypher query, citations with pages or URL, every chunk the answer saw, tokens, latency) for every source (`auto`, `text`, `corrective`, `sql`, `graph`). Embedding and reranking models load at startup. Errors: 422 for an empty or over-500-character question, 429 for LLM quota (daily vs per-minute), 503 for `source=graph` without Neo4j, 500 with a fixed message otherwise (details in the server log only). No authentication yet; needed before deploying.
 
 **Evidence:** 14 tests with FastAPI's test client and a stub answerer (no models, databases or quota). Live: the server starts (pool, Neo4j, models), `/health` → `{"postgres": true, "neo4j": true, ...}`, `/meta` lists bce, rbc, scotiabank and 2021–2024. A live `/ask` waits until the eval runs have finished with the shared quota.
+
+## 2026-10-17 — UI: one static page served by the API
+
+**Context:** Phase 5 asks for a simple UI showing the answer, route, sources and retrieved chunks.
+
+**Options considered:** Streamlit (fast to write, but a second Python app that would duplicate the API's logic); React or similar (a build toolchain for one page); **one static HTML page with plain JavaScript**, served by FastAPI at `/` (same origin, so no CORS).
+
+**Decision:** the static page (`api/static/index.html`, ~300 lines with CSS). It reads `/ask/stream` with `fetch()` and a small server-sent-events parser (`EventSource` only does GET), shows each step as it arrives, then the answer with `[n]` linked to its chunk, badges (answered, route, Self-RAG verdict, tokens, time), cited sources (pages or URL), the SQL/Cypher query, and every chunk the answer model saw with its score. All answer and chunk text is inserted with `textContent`/DOM nodes, never `innerHTML` (a test checks this), since web results are untrusted.
+
+**Evidence:** checked in headless Chrome against the real app with a stub answerer (no quota): streamed steps, answer, citations and chunks render in light and dark mode, and the page is no wider than the viewport at 500 px (headless Chrome's minimum). A README screenshot with a real answer waits until the eval runs free up the quota.

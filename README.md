@@ -39,7 +39,7 @@ uv run python scripts/ask.py --sql "Which bank had the higher CET1 ratio in 2024
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
 | 3. Structured data | Real tables, SQL tool, knowledge graph, chart summaries | 🟡 Nearly done: SQL tool (0.80 vs 0.67 on numeric questions) and graph tool built and measured; chart summaries being generated (~70 a day on the free tier) |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | 🟡 In progress: router (route accuracy 0.83) and web search built; corrective RAG built with LangGraph, not yet measured |
-| 5. Ship | API, UI, deployment | 🟡 In progress: API built (`/ask`, `/ask/stream` with progress events) |
+| 5. Ship | API, UI, deployment | 🟡 In progress: API (`/ask`, `/ask/stream` with progress events) and web UI built; deployment next |
 
 **Corpus so far:** 12 of 20 reports ingested (also parsed with tables) (BCE, RBC and Scotiabank, fiscal 2021–2024). TD and Shopify are downloaded but not yet ingested.
 
@@ -364,8 +364,8 @@ flowchart LR
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
-    class api,agent,dbs done
-    class user,ui,cloud planned
+    class user,ui,api,agent,dbs done
+    class cloud planned
 ```
 
 - **API** (`api/main.py`, `api/service.py`, `api/schemas.py`; start it with `uv run uvicorn reportlens.api.main:app --reload`, docs at `http://localhost:8000/docs`):
@@ -398,5 +398,8 @@ flowchart LR
   - **The stream reports progress, not tokens.** Citations are parsed and the answer is checked only when it is complete, and a question takes 20–60 s on a laptop CPU, so the useful part is seeing the route and each step as they happen. The agents report steps through `agents/events.py`, which does nothing unless the API is listening, so the CLI and the evals are unchanged.
   - **Resources:** a small Postgres connection pool (a connection can't be shared between requests running in parallel), one Neo4j driver (if Neo4j is down, graph routes fall back to text search and `source=graph` returns 503), and the embedding and reranking models loaded at startup.
   - **Errors:** an empty or over-500-character question → 422; out of LLM quota → 429 (saying daily or per-minute); any other error → 500 with a short message, details in the server log only. No authentication yet: it runs locally.
-- **UI:** a simple page showing the answer, its sources and the chunks it was built from, so you can see why it answered the way it did.
+- **UI** (`api/static/index.html`, served at `http://localhost:8000/` by the API): one page of plain HTML, CSS and JavaScript, no build step. Ask a question (or click an example), pick a source (`auto` lets the router choose), and watch each step arrive: the router's pick and reason, corrective RAG's grades and rewrites, Self-RAG's checks. Then the answer with badges (answered or not found, route, supported by its sources, tokens, time in LLM calls), its `[n]` markers linked to the chunks they cite, a card per cited source (company, year and pages, or the URL), the SQL or Cypher behind a SQL or graph answer, and every chunk the answer model saw, with its score and the cited ones in bold, so you can see why it answered the way it did.
+  - It reads the stream with `fetch()`, because `EventSource` only makes GET requests and `/ask/stream` is a POST.
+  - Answers and chunks (web pages above all) are inserted as text, never as HTML.
+  - Light and dark mode follow the system; the layout fits a phone.
 - **Deploy:** hosted on free tiers.

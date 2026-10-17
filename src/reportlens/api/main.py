@@ -2,6 +2,7 @@
 
     uv run uvicorn reportlens.api.main:app --reload
 
+- GET  /            the web UI (api/static/index.html: one page, no build step)
 - GET  /health      Postgres and Neo4j reachable? web search and Self-RAG on?
 - GET  /meta        companies and years loaded, and the sources a question can ask for
 - POST /ask         {"question": "...", "source": "auto"} -> the answer, route, steps and sources
@@ -17,10 +18,11 @@ import queue
 import threading
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from reportlens.agents.events import listening
 from reportlens.api import service
@@ -34,6 +36,7 @@ log = get_logger(__name__)
 
 AnswerFn = Callable[[str, Source, service.Resources], AskResponse]
 SOURCES: list[Source] = ["auto", "text", "corrective", "sql", "graph"]
+UI_PAGE = Path(__file__).parent / "static" / "index.html"
 
 
 @asynccontextmanager
@@ -84,6 +87,11 @@ async def known_error(request: Request, err: Exception) -> JSONResponse:
 
 
 # --- routes ---------------------------------------------------------------------------------
+
+
+@app.get("/", include_in_schema=False)
+def ui() -> FileResponse:
+    return FileResponse(UI_PAGE, media_type="text/html")
 
 
 @app.get("/health")

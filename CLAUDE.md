@@ -65,7 +65,7 @@ reportlens/
 │   ├── agents/           # router.py, routed.py (router + fallback), corrective.py, self_rag.py (LangGraph), events.py (progress for the API)
 │   ├── generation/       # answer.py (answers with page citations), prompts.py
 │   ├── evals/            # questions.py, metrics.py, judge.py, runner.py, routing.py (eval logic)
-│   └── api/              # main.py (FastAPI routes), service.py (answering, resources), schemas.py
+│   └── api/              # main.py (FastAPI routes), service.py (answering, resources), schemas.py, static/index.html (UI)
 ├── evals/
 │   ├── questions.jsonl   # OWNED BY THE HUMAN, see rules below
 │   ├── questions.smoke.jsonl  # smoke test for the runner only; never recorded in results.md
@@ -104,7 +104,7 @@ uv run python evals/run_evals.py --name "corrective" --source corrective   # Pha
 uv run python evals/run_evals.py --name "corrective" --source corrective --resume   # continue a run stopped by the daily limit (exit 3)
 SELF_RAG=true uv run python scripts/ask.py --routed "Why did BCE's headcount change in 2024?"   # Phase 4: routed answer + Self-RAG check
 nohup caffeinate -i scripts/eval_loop.sh >> data/cache/evals_run.log 2>&1 &   # Phase 4 evals back to back, resuming after each daily limit
-uv run uvicorn reportlens.api.main:app --reload      # Phase 5: start the API (docs at http://localhost:8000/docs; loads models at startup)
+uv run uvicorn reportlens.api.main:app --reload      # Phase 5: start the API + UI (UI at http://localhost:8000, docs at /docs; loads models at startup)
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
 uv run ruff check . && uv run ruff format .          # lint and format
@@ -162,7 +162,7 @@ Keep this section up to date when commands change.
 ### Phase 5: Ship
 
 - [x] FastAPI endpoints with streaming; response includes route taken, sources and pages (`api/`: `/health`, `/meta`, `/ask`, `/ask/stream` (server-sent progress events: route, steps, answer, done/error; not token streaming); tested with stubs and started live (health and meta); no auth yet; see DECISIONS.md 2026-10-17)
-- [ ] Simple UI showing answer, route, sources and retrieved chunks
+- [x] Simple UI showing answer, route, sources and retrieved chunks (`api/static/index.html` at `/`: plain HTML/CSS/JS, streams steps from `/ask/stream`; checked with a stub answerer in light and dark; screenshot for the README after the evals free up the quota; see DECISIONS.md 2026-10-17)
 - [ ] Deploy (API: Railway/Fly; DB: Neon/Supabase; graph: Neo4j AuraDB free)
 - [ ] README: architecture diagram, results table, design decisions, demo video link
 

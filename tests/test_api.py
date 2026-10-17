@@ -169,3 +169,11 @@ def test_graph_without_neo4j_is_unavailable() -> None:
     resources = service.Resources(pool=None, driver=None)  # type: ignore[arg-type]
     with pytest.raises(service.SourceUnavailable):
         service.answer("Who was RBC's CFO?", "graph", resources)
+
+
+def test_the_ui_page_is_served_and_streams_from_the_api(client: TestClient) -> None:
+    response = client.get("/")
+    assert response.status_code == 200 and response.headers["content-type"].startswith("text/html")
+    page = response.text
+    assert "<title>ReportLens</title>" in page and 'fetch("/ask/stream"' in page
+    assert "innerHTML" not in page  # untrusted text is only ever inserted as text

@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReportLens</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e3de;
+    --accent: #2f6fdf; --accent-soft: #e8effc; --ok: #1f7a3f; --ok-soft: #e3f3e8;
+    --warn: #9a6200; --warn-soft: #fbf0dc; --bad: #b42318; --bad-soft: #fde8e6;
+    --code: #f1f1ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151515; --panel: #1e1e1e; --text: #ececea; --muted: #a0a09a; --line: #333331;
+      --accent: #7aa7ff; --accent-soft: #1d2a44; --ok: #6fcf8f; --ok-soft: #173222;
+      --warn: #f0b85a; --warn-soft: #3a2c12; --bad: #ff8a80; --bad-soft: #3d1b18;
+      --code: #262624;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 2px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+       margin: 0 0 10px; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+           padding: 16px; margin-top: 14px; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  textarea { flex: 1 1 100%; min-height: 64px; resize: vertical; padding: 10px; font: inherit;
+             color: var(--text); background: var(--panel); border: 1px solid var(--line);
+             border-radius: 8px; }
+  select, button { font: inherit; padding: 8px 12px; border-radius: 8px;
+                   border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+  button[type=submit] { background: var(--accent); border-color: var(--accent); color: #fff;
+                        font-weight: 600; margin-left: auto; cursor: pointer; }
+  button[disabled] { opacity: .6; cursor: wait; }
+  .examples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .examples button { font-size: 13px; padding: 4px 10px; color: var(--muted); cursor: pointer; }
+  ol.steps { margin: 0; padding-left: 20px; }
+  ol.steps li { margin: 2px 0; }
+  .stage { font-size: 12px; color: var(--muted); margin-right: 6px; }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--code);
+           color: var(--muted); }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.bad { background: var(--bad-soft); color: var(--bad); }
+  .answer { font-size: 16px; white-space: pre-wrap; margin: 0; }
+  a.cite { color: var(--accent); text-decoration: none; font-weight: 600; }
+  .sources { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .source { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .source b { margin-right: 6px; color: var(--accent); }
+  .source a { color: var(--accent); word-break: break-all; }
+  details.chunk { border-top: 1px solid var(--line); padding: 8px 0; }
+  details.chunk summary { cursor: pointer; }
+  details.chunk.cited summary { font-weight: 600; }
+  details.chunk.flash { background: var(--accent-soft); }
+  .chunk pre, pre.query { white-space: pre-wrap; word-break: break-word; background: var(--code);
+                          padding: 10px; border-radius: 8px; font-size: 13px; margin: 8px 0 0; }
+  .error { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
+  .hidden { display: none; }
+  .muted { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>ReportLens</h1>
+  <p class="sub">Questions about RBC, Scotiabank and BCE annual reports (fiscal 2021–2024),
+    answered with page citations.</p>
+
+  <form id="ask" class="panel">
+    <textarea id="question" maxlength="500" required
+      placeholder="e.g. How did RBC's and Scotiabank's dividends per share compare in 2024?"></textarea>
+    <label class="muted" for="source">Source</label>
+    <select id="source">
+      <option value="auto">auto (router picks)</option>
+      <option value="text">text search</option>
+      <option value="corrective">corrective RAG</option>
+      <option value="sql">SQL (financial tables)</option>
+      <option value="graph">graph (Neo4j)</option>
+    </select>
+    <button type="submit" id="go">Ask</button>
+    <div class="examples" id="examples"></div>
+  </form>
+
+  <section id="error" class="panel error hidden" role="alert"></section>
+
+  <section id="progress" class="panel hidden">
+    <h2>How it's answering</h2>
+    <ol class="steps" id="steps"></ol>
+  </section>
+
+  <section id="result" class="hidden">
+    <div class="panel">
+      <h2>Answer</h2>
+      <div class="badges" id="badges"></div>
+      <p class="answer" id="answer"></p>
+      <pre class="query hidden" id="query"></pre>
+    </div>
+    <div class="panel" id="sources-panel">
+      <h2>Sources cited</h2>
+      <div class="sources" id="sources"></div>
+    </div>
+    <div class="panel">
+      <h2>Everything the answer model saw</h2>
+      <div id="chunks"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const EXAMPLES = [
+  "How did RBC's and Scotiabank's dividends per share compare in 2024?",
+  "Who replaced Nadine Ahn as RBC's CFO?",
+  "Why did BCE's employee headcount change in 2024?",
+  "Which bank had the higher CET1 ratio in 2024, RBC or Scotiabank?",
+];
+const $ = (id) => document.getElementById(id);
+
+// Build elements with text only: answers and chunks (web pages above all) are untrusted.
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (key === "class") node.className = value; else node.setAttribute(key, value);
+  }
+  for (const child of children) node.append(child);
+  return node;
+}
+
+function pages(list) {
+  if (!list.length) return "";
+  return (list.length === 1 ? "page " : "pages ") + list.join(", ");
+}
+
+function sourceLabel(c) {
+  return c.company === "web" ? "web" : `${c.company.toUpperCase()} ${c.year}, ${pages(c.pages)}`;
+}
+
+function addStep(stage, text) {
+  $("steps").append(el("li", {}, el("span", { class: "stage" }, stage), text));
+}
+
+function showError(message) {
+  $("error").textContent = message;
+  $("error").classList.remove("hidden");
+}
+
+// "[1][3]" in the answer become links to the chunk they cite.
+function answerWithLinks(text, chunkIds) {
+  const out = document.createDocumentFragment();
+  let last = 0;
+  for (const match of text.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
+    out.append(text.slice(last, match.index));
+    for (const n of match[1].split(",").map((s) => parseInt(s, 10))) {
+      const link = el("a", { class: "cite", href: `#chunk-${n}` }, `[${n}]`);
+      link.addEventListener("click", () => openChunk(n));
+      out.append(link);
+    }
+    last = match.index + match[0].length;
+  }
+  out.append(text.slice(last));
+  return out;
+}
+
+function openChunk(n) {
+  const chunk = $(`chunk-${n}`);
+  if (!chunk) return;
+  chunk.open = true;
+  chunk.classList.add("flash");
+  setTimeout(() => chunk.classList.remove("flash"), 1200);
+}
+
+function badge(text, kind = "") {
+  return el("span", { class: `badge ${kind}` }, text);
+}
+
+function showAnswer(r) {
+  const badges = $("badges");
+  badges.replaceChildren(
+    r.found ? badge("answered", "ok") : badge("not found", "warn"),
+    ...(r.route ? [badge(`route: ${r.route.source}`)] : [badge(`source: ${r.source}`)]),
+    ...(r.supported === true ? [badge("supported by its sources", "ok")] : []),
+    ...(r.supported === false ? [badge("some claims unsupported", "bad")] : []),
+    badge(`${r.input_tokens + r.output_tokens} tokens`),
+    badge(`${r.latency_s.toFixed(1)} s in LLM calls`),
+  );
+  $("answer").replaceChildren(answerWithLinks(r.answer, r.chunks.map((c) => c.id)));
+  $("query").textContent = r.query || "";
+  $("query").classList.toggle("hidden", !r.query);
+
+  $("sources").replaceChildren(...r.citations.map((c) => {
+    const where = c.url
+      ? el("a", { href: c.url, target: "_blank", rel: "noopener noreferrer" }, c.url)
+      : sourceLabel(c);
+    return el("div", { class: "source" }, el("b", {}, `[${c.number}]`), where);
+  }));
+  $("sources-panel").classList.toggle("hidden", !r.citations.length);
+
+  const cited = new Set(r.citations.map((c) => c.number));
+  $("chunks").replaceChildren(...r.chunks.map((c, i) => {
+    const n = i + 1;
+    const summary = el("summary", {},
+      `[${n}] ${sourceLabel({ ...c, pages: c.pages })}` +
+      (c.section ? ` · ${c.section}` : "") + ` · score ${c.score.toFixed(2)}` +
+      (cited.has(n) ? " · cited" : ""));
+    return el("details", { class: `chunk${cited.has(n) ? " cited" : ""}`, id: `chunk-${n}` },
+      summary, el("pre", {}, c.text));
+  }));
+  if (!r.chunks.length) $("chunks").replaceChildren(el("p", { class: "muted" }, "No sources."));
+  $("result").classList.remove("hidden");
+}
+
+function handle(kind, data) {
+  if (kind === "route") addStep("router", `→ ${data.source}: ${data.reason}`);
+  else if (kind === "step") addStep(data.stage, data.text);
+  else if (kind === "answer") showAnswer(data);
+  else if (kind === "error") showError(data.detail);
+}
+
+// /ask/stream is a POST, so read the server-sent events from fetch() (EventSource is GET-only).
+async function ask(question, source) {
+  const response = await fetch("/ask/stream", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ question, source }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const detail = Array.isArray(body.detail) ? body.detail[0].msg : body.detail;
+    throw new Error(detail || `HTTP ${response.status}`);
+  }
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += value;
+    let end;
+    while ((end = buffer.indexOf("\n\n")) >= 0) {
+      const block = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      const kind = block.match(/^event: (.*)$/m)?.[1];
+      const data = block.match(/^data: (.*)$/m)?.[1];
+      if (kind && data) handle(kind, JSON.parse(data));
+    }
+  }
+}
+
+$("ask").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const question = $("question").value.trim();
+  if (!question) return;
+  $("error").classList.add("hidden");
+  $("result").classList.add("hidden");
+  $("steps").replaceChildren();
+  $("progress").classList.remove("hidden");
+  $("go").disabled = true;
+  $("go").textContent = "Answering…";
+  try {
+    await ask(question, $("source").value);
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    $("go").disabled = false;
+    $("go").textContent = "Ask";
+  }
+});
+
+for (const q of EXAMPLES) {
+  const button = el("button", { type: "button" }, q);
+  button.addEventListener("click", () => { $("question").value = q; $("question").focus(); });
+  $("examples").append(button);
+}
+</script>
+</body>
+</html>

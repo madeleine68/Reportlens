@@ -1,8 +1,8 @@
-# The API + UI as a Hugging Face Docker Space (Phase 5). Built from the folder that
-# scripts/deploy_space.py assembles: requirements.txt, src/, core/schema.sql inside src/.
+# The API + UI (Phase 5), for Cloud Run (scripts/deploy_cloudrun.py) or a Hugging Face Docker
+# Space (scripts/deploy_space.py). Built from the folder both assemble: requirements.txt, src/.
 FROM python:3.12-slim
 
-# Spaces run the container as user 1000; give it a home and the app's data folder (caches).
+# Spaces run the container as user 1000 (Cloud Run doesn't mind); give it a home and the app's data folder (caches).
 RUN useradd -m -u 1000 user
 WORKDIR /app
 

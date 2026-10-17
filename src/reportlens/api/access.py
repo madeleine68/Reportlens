@@ -5,9 +5,11 @@
 - RATE_LIMIT_PER_HOUR: questions per visitor in any rolling hour (visitor = client IP).
 - DAILY_QUESTION_CAP: questions per calendar day (UTC) for everyone together; the hard limit.
 
-Counts live in memory: right for a single server process (one Hugging Face Space), reset when it
-restarts. The visitor's IP is the first X-Forwarded-For entry (the Space sits behind a proxy),
-which a client can fake; the daily cap is what bounds the cost.
+The hourly counts live in memory (one server process; they reset when it restarts). The daily
+count lives in Postgres when the API has a database (the app sets `app.state.take_day`), so
+restarts don't reset it: Cloud Run stops idle instances. Without one it is kept in memory too.
+The visitor's IP is the first X-Forwarded-For entry (the app sits behind a proxy), which a
+client can fake; the daily cap is what bounds the cost.
 """
 
 import datetime as dt
@@ -15,10 +17,14 @@ import hmac
 import threading
 import time
 from collections import defaultdict, deque
+from collections.abc import Callable
 
 from fastapi import HTTPException, Request
 
 from reportlens.core.config import get_settings
+from reportlens.core.logging import get_logger
+
+log = get_logger(__name__)
 
 PASSWORD_HEADER = "X-Demo-Password"
 HOUR_S = 3600.0
@@ -56,27 +62,44 @@ class RateLimiter:
         self._day: dt.date | None = None
         self._day_count = 0
 
-    def allow(self, key: str, per_hour: int, per_day: int) -> tuple[bool, str, int]:
-        """(allowed, reason if not, seconds to wait). A refused question is not counted."""
+    def allow(
+        self,
+        key: str,
+        per_hour: int,
+        per_day: int,
+        take_day: Callable[[int], bool] | None = None,
+    ) -> tuple[bool, str, int]:
+        """(allowed, reason if not, seconds to wait). A refused question is not counted.
+
+        take_day(per_day) counts one question against the daily cap elsewhere (Postgres) and
+        returns False when the cap is reached; without it the day is counted in memory.
+        """
         with self._lock:
-            now, today = self._clock(), self._today()
-            if today != self._day:
-                self._day, self._day_count = today, 0
-            if per_day and self._day_count >= per_day:
-                return (
-                    False,
-                    "The demo's daily question limit is reached; try again tomorrow.",
-                    3600,
-                )
+            now = self._clock()
             recent = self._recent[key]
             while recent and now - recent[0] >= HOUR_S:
                 recent.popleft()
             if per_hour and len(recent) >= per_hour:
                 wait = int(HOUR_S - (now - recent[0])) + 1
                 return False, f"Limit of {per_hour} questions per hour reached; try later.", wait
+            if per_day and not (take_day or self._take_day)(per_day):
+                return (
+                    False,
+                    "The demo's daily question limit is reached; try again tomorrow.",
+                    3600,
+                )
             recent.append(now)
-            self._day_count += 1
             return True, "", 0
+
+    def _take_day(self, per_day: int) -> bool:
+        """The in-memory daily count (call with the lock held)."""
+        today = self._today()
+        if today != self._day:
+            self._day, self._day_count = today, 0
+        if self._day_count >= per_day:
+            return False
+        self._day_count += 1
+        return True
 
 
 limiter = RateLimiter()
@@ -87,8 +110,25 @@ def require_access(request: Request) -> None:
     if not check_password(request.headers.get(PASSWORD_HEADER)):
         raise HTTPException(status_code=401, detail="Wrong or missing demo password.")
     settings = get_settings()
+    take_day = getattr(request.app.state, "take_day", None)
     allowed, reason, wait = limiter.allow(
-        client_key(request), settings.rate_limit_per_hour, settings.daily_question_cap
+        client_key(request),
+        settings.rate_limit_per_hour,
+        settings.daily_question_cap,
+        _fall_back_to_memory(take_day) if take_day else None,
     )
     if not allowed:
         raise HTTPException(status_code=429, detail=reason, headers={"Retry-After": str(wait)})
+
+
+def _fall_back_to_memory(take_day: Callable[[int], bool]) -> Callable[[int], bool]:
+    """take_day, but counted in memory if the database can't be reached (logged)."""
+
+    def take(per_day: int) -> bool:
+        try:
+            return take_day(per_day)
+        except Exception as err:  # noqa: BLE001  # the cap still holds, per process
+            log.warning("access.daily_count_in_memory error=%s", err)
+            return limiter._take_day(per_day)
+
+    return take

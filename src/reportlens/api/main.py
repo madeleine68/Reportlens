@@ -44,6 +44,7 @@ UI_PAGE = Path(__file__).parent / "static" / "index.html"
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging(get_settings().log_level)
     app.state.resources = service.open_resources()
+    app.state.take_day = service.daily_counter(app.state.resources)  # cap survives restarts
     service.warm_up_models()
     log.info("api.ready neo4j=%s", app.state.resources.driver is not None)
     yield

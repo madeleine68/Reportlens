@@ -509,3 +509,16 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 - `scripts/deploy_space.py` uploads only `src/`, the locked requirements, the Dockerfile and a Space README (Hugging Face reads the Space's settings from its header) via `huggingface_hub`; `--secrets` sets the Space's secrets from `.env.deploy`. `scripts/deploy_data.py` copies Postgres with `pg_dump | psql` inside the local Postgres container (matching client version; the target URL passed through the environment) and rebuilds the graph on AuraDB from the cache (no LLM calls).
 
 **Evidence:** 7 tests for the password, limits and URL overrides; the Space folder assembles to 59 files (code, requirements, Dockerfile, README; no data or secrets). The image builds locally (linux/amd64, 2.13 GB) and, run against the local databases, starts in about a minute, reports Postgres and Neo4j reachable and `password_required: true`, serves the UI, refuses `/ask` without the password (401), and uses ~506 MB of RAM idle.
+
+## 2026-10-17 — Deployment host: Google Cloud Run instead of a Hugging Face Space; the daily cap in Postgres
+
+**Context:** Creating the Space failed: "Static Spaces are free for everyone, but hosting Gradio and Docker Spaces on free cpu-basic requires a PRO subscription." The app needs at least 1 GB of RAM (~0.5 GB idle with both models loaded), which rules out 512 MB free tiers such as Render's. Neon and AuraDB were already loaded.
+
+**Options considered:** Hugging Face PRO (~$9/month, no code change); **Google Cloud Run** (free monthly allowance, card required, scales to zero so the first question after idle waits ~30–60 s); the laptop behind a tunnel (free, only while the Mac is on).
+
+**Decision (owner's choice):** Cloud Run, 2 GiB / 1 CPU, min 0 and max 1 instance (the hourly limit is counted in memory), startup CPU boost, 5-minute timeout, public.
+- `scripts/deploy_cloudrun.py`: `--setup` (APIs, an Artifact Registry repository, build and secret-reader roles for the compute service account), `--secrets` (Secret Manager, values sent on stdin), then build with Cloud Build from the same small folder as the Space (about 1 MB uploaded; no local Docker needed) and `gcloud run deploy` with plain variables from a temporary YAML file and secrets by reference.
+- Scaling to zero would reset an in-memory daily count, so `DAILY_QUESTION_CAP` is now counted in a `demo_usage` table (one row per UTC day, one atomic `INSERT … ON CONFLICT … WHERE questions < cap`), falling back to memory, with a log line, if Postgres can't be reached. The hourly limit stays in memory.
+- Found while copying the data: the SQL reader role's `GRANT CONNECT` used `POSTGRES_DB` (`reportlens`) instead of the connected database (Neon's `neondb`), which would also have crashed the app at startup; fixed to use the connection's database.
+
+**Evidence:** Neon has 6,075 chunks and 671 `financials` rows; the reader role can read `financials`, and a `DELETE` or a read of `chunks` is refused there. AuraDB has 148 nodes and 410 relationships, as locally. 3 new tests (daily count in Postgres, the hourly check before taking a daily slot, the memory fallback); 358 pass.

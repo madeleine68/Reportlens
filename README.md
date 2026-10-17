@@ -39,7 +39,7 @@ uv run python scripts/ask.py --sql "Which bank had the higher CET1 ratio in 2024
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
 | 3. Structured data | Real tables, SQL tool, knowledge graph, chart summaries | 🟡 Nearly done: SQL tool (0.80 vs 0.67 on numeric questions) and graph tool built and measured; chart summaries being generated (~70 a day on the free tier) |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | 🟡 In progress: router (route accuracy 0.83) and web search built; corrective RAG built with LangGraph, not yet measured |
-| 5. Ship | API, UI, deployment | 🟡 In progress: API (`/ask`, `/ask/stream` with progress events) and web UI built; deployment next |
+| 5. Ship | API, UI, deployment | 🟡 In progress: API (`/ask`, `/ask/stream` with progress events) and web UI built; data on Neon and AuraDB; Cloud Run deploy pending |
 
 **Corpus so far:** 12 of 20 reports ingested (also parsed with tables) (BCE, RBC and Scotiabank, fiscal 2021–2024). TD and Shopify are downloaded but not yet ingested.
 
@@ -360,7 +360,7 @@ flowchart LR
     ui --> api["FastAPI<br/>/ask and /ask/stream<br/>(progress events)"]
     api --> agent["Agentic RAG<br/>from Phase 4"]
     agent --> dbs[("Postgres + pgvector<br/>Neo4j")]
-    api -.->|"deployed on"| cloud["Railway or Fly (API)<br/>Neon or Supabase (DB)<br/>Neo4j AuraDB (graph)"]
+    api -.->|"deployed on"| cloud["Google Cloud Run (API)<br/>Neon (DB)<br/>Neo4j AuraDB (graph)"]
 
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
@@ -397,22 +397,22 @@ flowchart LR
 
   - **The stream reports progress, not tokens.** Citations are parsed and the answer is checked only when it is complete, and a question takes 20–60 s on a laptop CPU, so the useful part is seeing the route and each step as they happen. The agents report steps through `agents/events.py`, which does nothing unless the API is listening, so the CLI and the evals are unchanged.
   - **Resources:** a small Postgres connection pool (a connection can't be shared between requests running in parallel), one Neo4j driver (if Neo4j is down, graph routes fall back to text search and `source=graph` returns 503), and the embedding and reranking models loaded at startup.
-  - **Errors:** an empty or over-500-character question → 422; out of LLM quota → 429 (saying daily or per-minute); any other error → 500 with a short message, details in the server log only. No authentication yet: it runs locally.
+  - **Errors:** an empty or over-500-character question → 422; out of LLM quota → 429 (saying daily or per-minute); any other error → 500 with a short message, details in the server log only. Deployed, a demo password and rate limits guard the question endpoints (below).
 - **UI** (`api/static/index.html`, served at `http://localhost:8000/` by the API): one page of plain HTML, CSS and JavaScript, no build step. Ask a question (or click an example), pick a source (`auto` lets the router choose), and watch each step arrive: the router's pick and reason, corrective RAG's grades and rewrites, Self-RAG's checks. Then the answer with badges (answered or not found, route, supported by its sources, tokens, time in LLM calls), its `[n]` markers linked to the chunks they cite, a card per cited source (company, year and pages, or the URL), the SQL or Cypher behind a SQL or graph answer, and every chunk the answer model saw, with its score and the cited ones in bold, so you can see why it answered the way it did.
   - It reads the stream with `fetch()`, because `EventSource` only makes GET requests and `/ask/stream` is a POST.
   - Answers and chunks (web pages above all) are inserted as text, never as HTML.
   - Light and dark mode follow the system; the layout fits a phone.
-- **Deploy** (code ready; accounts and first upload pending): the API + UI as a **Hugging Face Docker Space** (free CPU with 16 GB RAM, which the embedding and reranking models need; it sleeps after 48 hours without visitors), Postgres on **Neon** and the graph on **Neo4j AuraDB Free**, all free tiers.
+- **Deploy** (data copied to Neon and AuraDB; Cloud Run deploy pending): the API + UI on **Google Cloud Run** (2 GB, scales to zero when idle, so the first question after a quiet spell waits ~30–60 s while the models load; within Cloud Run's monthly free allowance at demo traffic), Postgres on **Neon** and the graph on **Neo4j AuraDB Free**. The first plan, a Hugging Face Docker Space, now needs a PRO subscription; `scripts/deploy_space.py` still works for anyone with one.
 
   ```mermaid
   flowchart LR
       local[("Local Postgres<br/>+ Neo4j")] -->|"scripts/deploy_data.py<br/>pg_dump → psql; load_graph.py<br/>(no re-parsing, no LLM calls)"| hosted[("Neon Postgres<br/>AuraDB Neo4j")]
-      code["src/ + locked runtime deps<br/>(no PDF parsing, CPU-only torch)"] -->|"scripts/deploy_space.py"| space["Hugging Face Space<br/>Docker: models baked in,<br/>uvicorn on port 7860"]
+      code["src/ + locked runtime deps<br/>(no PDF parsing, CPU-only torch)"] -->|"scripts/deploy_cloudrun.py<br/>Cloud Build makes the image"| space["Cloud Run<br/>Docker: models baked in,<br/>uvicorn on port 7860,<br/>secrets from Secret Manager"]
       space --> hosted
       space --> groq["Groq API"]
       visitor["Visitor"] -->|"demo password,<br/>10 questions/hour,<br/>100/day for everyone"| space
   ```
 
-  - **Protecting the free-tier quota:** with `DEMO_PASSWORD` set, `/ask` needs it (the UI asks for it once per tab); each visitor gets `RATE_LIMIT_PER_HOUR` questions per rolling hour and everyone together `DAILY_QUESTION_CAP` per day (`api/access.py`). A wrong password is rejected before it counts. Counts are in memory, which suits one Space instance; the daily cap is the hard limit, since a visitor's IP comes from a header that can be faked.
+  - **Protecting the free-tier quota:** with `DEMO_PASSWORD` set, `/ask` needs it (the UI asks for it once per tab); each visitor gets `RATE_LIMIT_PER_HOUR` questions per rolling hour and everyone together `DAILY_QUESTION_CAP` per day (`api/access.py`). A wrong password is rejected before it counts. The hourly counts are in memory (Cloud Run runs at most one instance); the daily count is a row per day in Postgres (`demo_usage`), so an instance stopping when idle doesn't reset it. The daily cap is the hard limit, since a visitor's IP comes from a header that can be faked.
   - **A smaller image:** PDF parsing (Docling) is a separate `ingest` dependency group that local `uv sync` installs and the image leaves out, and the image uses the CPU-only build of PyTorch (no CUDA packages). Both models are downloaded when the image is built, so a cold start doesn't fetch them.
-  - **Settings:** hosted databases are given as full URLs (`DATABASE_URL`, `NEO4J_URI`); the SQL tool's read-only URL is derived from `DATABASE_URL` with the reader's name and password. Deploy values live in `.env.deploy` (git-ignored; template in `deploy/env.deploy.example`) and reach the Space as encrypted secrets.
+  - **Settings:** hosted databases are given as full URLs (`DATABASE_URL`, `NEO4J_URI`); the SQL tool's read-only URL is derived from `DATABASE_URL` with the reader's name and password. Deploy values live in `.env.deploy` (git-ignored; template in `deploy/env.deploy.example`); keys and passwords reach Cloud Run through Secret Manager, never a command line.

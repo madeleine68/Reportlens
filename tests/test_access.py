@@ -112,3 +112,37 @@ def test_local_reader_url_keeps_the_port(settings) -> None:
     assert get_settings().reader_database_url.endswith(
         "reportlens_reader:r@localhost:5433/" + get_settings().postgres_db
     )
+
+
+def test_the_daily_count_can_live_elsewhere() -> None:
+    taken: list[int] = []
+
+    def take_day(cap: int) -> bool:
+        taken.append(cap)
+        return len(taken) <= cap
+
+    limiter = RateLimiter(clock=lambda: 0.0)
+    assert limiter.allow("a", 1, 2, take_day)[0]
+    assert not limiter.allow("a", 1, 2, take_day)[0]  # the hourly limit refuses first...
+    assert taken == [2]  # ...without using a daily slot
+    assert limiter.allow("b", 1, 2, take_day)[0]
+    allowed, reason, _ = limiter.allow("c", 1, 2, take_day)
+    assert not allowed and "daily" in reason
+
+
+def test_a_database_failure_falls_back_to_counting_in_memory(monkeypatch) -> None:
+    monkeypatch.setattr(access, "limiter", RateLimiter())
+
+    def broken(cap: int) -> bool:
+        raise OSError("Neon is down")
+
+    take = access._fall_back_to_memory(broken)
+    assert [take(2), take(2), take(2)] == [True, True, False]
+
+
+def test_the_daily_count_in_postgres(conn) -> None:
+    from reportlens.api.service import take_daily_slot
+
+    conn.execute("TRUNCATE demo_usage")
+    assert [take_daily_slot(conn, 2) for _ in range(3)] == [True, True, False]
+    assert conn.execute("SELECT questions FROM demo_usage").fetchone()[0] == 2  # refusals uncounted

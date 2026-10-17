@@ -55,7 +55,7 @@ reportlens/
 ├── DECISIONS.md          # decision log, updated as we go
 ├── README.md
 ├── docker-compose.yml    # postgres+pgvector, neo4j (Phase 3)
-├── deploy/               # Dockerfile, space_README.md, env.deploy.example (Phase 5, Hugging Face Space)
+├── deploy/               # Dockerfile, env.deploy.example, space_README.md (Phase 5: Cloud Run; Hugging Face Space needs PRO)
 ├── .env.example
 ├── pyproject.toml
 ├── src/reportlens/
@@ -107,9 +107,10 @@ SELF_RAG=true uv run python scripts/ask.py --routed "Why did BCE's headcount cha
 nohup caffeinate -i scripts/eval_loop.sh >> data/cache/evals_run.log 2>&1 &   # Phase 4 evals back to back, resuming after each daily limit
 uv run uvicorn reportlens.api.main:app --reload      # Phase 5: start the API + UI (UI at http://localhost:8000, docs at /docs; loads models at startup)
 uv run python scripts/deploy_data.py                 # Phase 5: copy local Postgres → Neon and the graph → AuraDB (targets in .env.deploy)
-uv run python scripts/deploy_space.py --dry-run      # Phase 5: list what would be uploaded to the Space
-uv run python scripts/deploy_space.py --secrets      # Phase 5: set the Space's secrets/variables from .env.deploy
-uv run python scripts/deploy_space.py                # Phase 5: upload the code; the Space rebuilds
+uv run python scripts/deploy_cloudrun.py --setup     # Phase 5, once: enable APIs, image registry, service-account roles (needs gcloud auth login)
+uv run python scripts/deploy_cloudrun.py --secrets   # Phase 5: store/refresh secrets in Secret Manager from .env.deploy
+uv run python scripts/deploy_cloudrun.py             # Phase 5: build with Cloud Build and deploy to Cloud Run; prints the URL
+uv run python scripts/deploy_space.py --secrets      # alternative: a Hugging Face Docker Space (needs PRO); then without --secrets to upload
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
 uv run ruff check . && uv run ruff format .          # lint and format
@@ -168,7 +169,7 @@ Keep this section up to date when commands change.
 
 - [x] FastAPI endpoints with streaming; response includes route taken, sources and pages (`api/`: `/health`, `/meta`, `/ask`, `/ask/stream` (server-sent progress events: route, steps, answer, done/error; not token streaming); tested with stubs and started live (health and meta); no auth yet; see DECISIONS.md 2026-10-17)
 - [x] Simple UI showing answer, route, sources and retrieved chunks (`api/static/index.html` at `/`: plain HTML/CSS/JS, streams steps from `/ask/stream`; checked with a stub answerer in light and dark; screenshot for the README after the evals free up the quota; see DECISIONS.md 2026-10-17)
-- [ ] Deploy (API: Hugging Face Docker Space, chosen over Railway/Fly by the owner on 2026-10-17 because the models need ~1–1.5 GB RAM; DB: Neon; graph: Neo4j AuraDB free) (code ready: `deploy/Dockerfile`, `scripts/deploy_data.py`, `scripts/deploy_space.py`, demo password + rate limits in `api/access.py`; accounts and first upload pending; see DECISIONS.md 2026-10-17)
+- [ ] Deploy (API: Google Cloud Run, chosen by the owner on 2026-10-17 after Hugging Face Docker Spaces turned out to need PRO; DB: Neon; graph: Neo4j AuraDB free) (data copied to Neon (6,075 chunks, reader role checked) and AuraDB (148 nodes, 410 relationships); code ready: `deploy/Dockerfile`, `scripts/deploy_data.py`, `scripts/deploy_cloudrun.py`, demo password + rate limits in `api/access.py` with the daily count in Postgres; GCP account and first deploy pending; see DECISIONS.md 2026-10-17)
 - [ ] README: architecture diagram, results table, design decisions, demo video link
 
 ## Rules for the coding agent

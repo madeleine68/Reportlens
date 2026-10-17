@@ -84,3 +84,10 @@ CREATE TABLE IF NOT EXISTS financials (
     candidate_values INTEGER NOT NULL,        -- distinct values seen (> 1: tables disagreed)
     PRIMARY KEY (company, year, report_year, metric, scope, basis)
 );
+
+-- Phase 5: questions asked on the public demo per day (UTC), for DAILY_QUESTION_CAP. Kept here
+-- rather than in memory so the count survives restarts (Cloud Run stops idle instances).
+CREATE TABLE IF NOT EXISTS demo_usage (
+    day       DATE PRIMARY KEY,
+    questions INTEGER NOT NULL
+);

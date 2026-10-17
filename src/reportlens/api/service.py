@@ -5,6 +5,7 @@ be shared between requests running in parallel threads) and one Neo4j driver (th
 None when Neo4j is down, in which case graph routes fall back to text search as in the CLI.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import psycopg
@@ -55,6 +56,33 @@ def open_resources() -> Resources:
         log.warning("api.neo4j_unavailable error=%s", err)
         driver = None
     return Resources(pool=pool, driver=driver)
+
+
+def take_daily_slot(conn: psycopg.Connection, cap: int) -> bool:
+    """Count one demo question against today's cap (UTC); False, uncounted, if it is reached.
+
+    One statement, so parallel requests can't both take the last slot.
+    """
+    row = conn.execute(
+        """
+        INSERT INTO demo_usage (day, questions) VALUES ((now() AT TIME ZONE 'utc')::date, 1)
+        ON CONFLICT (day) DO UPDATE SET questions = demo_usage.questions + 1
+            WHERE demo_usage.questions < %s
+        RETURNING questions
+        """,
+        (cap,),
+    ).fetchone()
+    return row is not None
+
+
+def daily_counter(resources: Resources) -> Callable[[int], bool]:
+    """take_daily_slot on a pooled connection, for api/access.py."""
+
+    def take(cap: int) -> bool:
+        with resources.pool.connection() as conn:
+            return take_daily_slot(conn, cap)
+
+    return take
 
 
 def close_resources(resources: Resources) -> None:

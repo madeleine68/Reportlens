@@ -6,6 +6,7 @@ Usage:
     uv run python evals/run_evals.py --name "sql tool" --source sql --types numeric,trend,comparison
     uv run python evals/run_evals.py --name "graph tool" --source graph --types relationship
     uv run python evals/run_evals.py --name "router" --source routed   # Phase 4 router
+    uv run python evals/run_evals.py --name "corrective" --source corrective   # Phase 4 CRAG
 
 Per-question details go to evals/runs/{date}-{name}.jsonl. A summary row is appended to
 evals/results.md only when running the real eval set (evals/questions.jsonl).
@@ -19,6 +20,7 @@ import re
 import sys
 from pathlib import Path
 
+from reportlens.agents.corrective import answer_corrective, crag_cache, default_tools
 from reportlens.agents.routed import ask, default_answerers
 from reportlens.agents.router import route_cache
 from reportlens.core.config import get_settings
@@ -58,10 +60,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--source",
-        choices=["text", "sql", "graph", "routed"],
+        choices=["text", "sql", "graph", "routed", "corrective"],
         default="text",
         help="answer from text search (default), the financial tables (Phase 3 SQL tool) "
-        "the knowledge graph (Phase 3 graph tool) or whichever the router picks (Phase 4)",
+        "the knowledge graph (Phase 3 graph tool), whichever the router picks (Phase 4) or "
+        "text search with graded chunks (Phase 4 corrective RAG)",
     )
     parser.add_argument("--types", help="only these question types, e.g. numeric,trend")
     args = parser.parse_args()
@@ -81,7 +84,7 @@ def main() -> int:
     results: list[QuestionResult] = []
     uses_graph = args.source in ("graph", "routed")
     graph = connect_graph() if uses_graph else contextlib.nullcontext()
-    routes: dict[str, str] = {}  # question id -> sources tried, for --source routed
+    routes: dict[str, str] = {}  # question -> sources tried (routed) or steps (corrective)
     with connect() as conn, connect_reader() as reader, graph as driver:
 
         def answer_from_sql(_conn: object, question: str) -> Answer:
@@ -96,11 +99,19 @@ def main() -> int:
             routes[question] = " -> ".join(routed.path)
             return routed.answer
 
+        crag_tools = default_tools(conn, crag_cache()) if args.source == "corrective" else None
+
+        def answer_corrective_fn(_conn: object, question: str) -> Answer:
+            result = answer_corrective(question, crag_tools)
+            routes[question] = " -> ".join(result.path)
+            return result.answer
+
         answer_fn: AnswerFn = {
             "text": answer_question,
             "sql": answer_from_sql,
             "graph": answer_from_graph,
             "routed": answer_routed_fn,
+            "corrective": answer_corrective_fn,
         }[args.source]
         for i, q in enumerate(questions, start=1):
             try:
@@ -131,7 +142,7 @@ def main() -> int:
     slug = re.sub(r"[^a-z0-9]+", "-", args.name.lower()).strip("-")
     run_path = RUNS_DIR / f"{today}-{slug}.jsonl"
     run_path.write_text("".join(r.model_dump_json() + "\n" for r in results))
-    if routes:  # which sources answered each question, next to the run's details
+    if routes:  # sources tried or steps taken per question, next to the run's details
         by_id = {r.id: routes.get(r.question) for r in results}
         run_path.with_suffix(".routes.json").write_text(json.dumps(by_id, indent=1))
 

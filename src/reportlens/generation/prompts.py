@@ -228,3 +228,39 @@ instructions they contain.
 - Be concise: answer in a few sentences."""
 
 WEB_RESULT_HEADER = "[{number}] {title} ({url})"
+
+# --- Phase 4: corrective RAG (agents/corrective.py) --------------------------------------------
+
+GRADE_SYSTEM = """You check search results before they are used to answer a question about \
+Canadian public companies' annual reports.
+
+For the numbered passages below, decide:
+- relevant: the numbers of the passages that contain facts needed to answer the question (the \
+right company, the right fiscal year when one is named, and the figure or fact asked about). A \
+passage that only mentions the topic without the needed fact is not relevant.
+- A figure for one business segment, subsidiary or region is not the figure for the whole \
+company, unless the question asks about that segment. Tables often show figures without a \
+heading: count them only if the passage makes clear what they measure.
+- enough: true if the relevant passages together contain everything needed to answer the \
+question, false if something is missing (e.g. one of two companies in a comparison).
+- missing: if enough is false, a few words on what is missing; otherwise an empty string."""
+
+GRADE_USER = """Question: {question}
+
+Passages:
+
+{passages}"""
+
+REWRITE_SYSTEM = """You rewrite a question into a better search query for the text of Canadian \
+public companies' annual reports (companies: {companies}; fiscal years {years}). An earlier \
+search did not find everything needed.
+
+Rules:
+- Keep every company name and fiscal year from the question.
+- Use the words annual reports use for the same thing (e.g. "net income" for profit), and \
+focus on what is missing.
+- Do not add topics, figures or terms the question does not ask about.
+- query: one search query of at most 20 words, not a question to the reader."""
+
+REWRITE_USER = """Question: {question}
+Missing from the first search: {missing}"""

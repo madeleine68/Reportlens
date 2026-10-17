@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     web_max_results: int = 5
     web_timeout_s: float = 15.0
 
+    # Phase 4 corrective RAG: the fast model grades retrieved chunks; if they are not enough,
+    # it rewrites the query (at most this many times), then falls back to the web or refuses.
+    crag_max_rewrites: int = 1
+    # LangGraph's step limit for one question (the longest normal run takes 6 steps).
+    agent_max_steps: int = 12
+
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"
 
@@ -117,6 +123,11 @@ class Settings(BaseSettings):
     def route_cache_path(self) -> Path:
         """Cache of router decisions, keyed by model, prompt and question."""
         return self.data_dir / "cache" / "routes.json"
+
+    @property
+    def crag_cache_path(self) -> Path:
+        """Cache of corrective RAG grades and rewrites, keyed by model, prompt and input."""
+        return self.data_dir / "cache" / "corrective.json"
 
     @property
     def figure_cache_path(self) -> Path:

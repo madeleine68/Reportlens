@@ -5,12 +5,14 @@ Usage:
     uv run python scripts/ask.py --sql "What was RBC's net income in 2023?"   # Phase 3 SQL tool
     uv run python scripts/ask.py --graph "Who was Scotiabank's CFO in 2024?"  # Phase 3 graph tool
     uv run python scripts/ask.py --routed "Who replaced Nadine Ahn as RBC's CFO?"  # Phase 4 router
+    uv run python scripts/ask.py --corrective "How did BCE's capex change in 2024?"  # Phase 4 CRAG
 """
 
 import argparse
 
 from neo4j.exceptions import ServiceUnavailable
 
+from reportlens.agents.corrective import answer_corrective, crag_cache, default_tools
 from reportlens.agents.routed import ask, default_answerers
 from reportlens.agents.router import route_cache
 from reportlens.core.config import get_settings
@@ -31,6 +33,9 @@ def main() -> None:
     source.add_argument("--sql", action="store_true", help="answer from the financial tables")
     source.add_argument("--graph", action="store_true", help="answer from the knowledge graph")
     source.add_argument("--routed", action="store_true", help="let the router pick the source")
+    source.add_argument(
+        "--corrective", action="store_true", help="grade retrieved chunks, rewrite if needed"
+    )
     args = parser.parse_args()
     setup_logging(get_settings().log_level)
     if args.sql:
@@ -44,7 +49,12 @@ def main() -> None:
         return
 
     with connect() as conn:
-        answer = answer_question(conn, args.question)
+        if args.corrective:
+            result = answer_corrective(args.question, default_tools(conn, crag_cache()))
+            answer = result.answer
+            print("\nSteps:\n  " + "\n  ".join(result.path))
+        else:
+            answer = answer_question(conn, args.question)
 
     print(f"\n{answer.text}\n")
     if answer.citations:

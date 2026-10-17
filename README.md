@@ -37,8 +37,8 @@ uv run python scripts/ask.py --sql "Which bank had the higher CET1 ratio in 2024
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
-| 3. Structured data | Real tables, SQL tool, knowledge graph | 🟡 In progress: SQL tool built and measured (0.80 vs 0.67 on numeric questions); knowledge graph built; Cypher tool next |
-| 4. Agentic layer | Router, Self-RAG, Corrective RAG | ⬜ Planned |
+| 3. Structured data | Real tables, SQL tool, knowledge graph, chart summaries | 🟡 Nearly done: SQL tool (0.80 vs 0.67 on numeric questions) and graph tool built and measured; chart summaries being generated (~70 a day on the free tier) |
+| 4. Agentic layer | Router, Self-RAG, Corrective RAG | 🟡 In progress: router (route accuracy 0.83) and web search built; corrective RAG built with LangGraph, not yet measured |
 | 5. Ship | API, UI, deployment | ⬜ Planned |
 
 **Corpus so far:** 12 of 20 reports ingested (also parsed with tables) (BCE, RBC and Scotiabank, fiscal 2021–2024). TD and Shopify are downloaded but not yet ingested.
@@ -309,7 +309,29 @@ flowchart TD
 - **Router** (`agents/router.py`, `agents/routed.py`; try it with `scripts/ask.py --routed "..."`): the fast LLM picks one source with a one-line reason, from a short description of what each source is good at, taken from the Phase 3 evals (SQL for figures, trends and comparisons; the graph for officer, subsidiary and segment changes across years; text search for everything else and as the default; web for anything the reports don't cover; no lookup only to define a finance term). If SQL or the graph finds nothing, text search answers instead, and the answer reports the path taken (e.g. `sql -> vector`). If the router call itself fails, the question goes to text search. If a tool fails (a network or database error), text search answers too.
   - **Route accuracy** (`evals/route_accuracy.py`, fast-model calls only): on the 42 questions that already have scores from two or more sources, the router picks a best-scoring source for **35 (0.83)**, against 30 for always using text search and 28 for always using SQL. Its misses: BCE's exact headcount (only in the text, but it looks like a SQL figure), two relationship questions sent to the graph or SQL that text search answered, and the CFO-change question, which it sent to text search instead of the graph.
 - **Web search** (`sources/web_tool.py`): with `WEB_SEARCH=true` and a `TAVILY_API_KEY`, the router's web route asks Tavily for the top 5 results, and the main LLM answers only from them, cites each URL, and starts with *"From the web, not the annual reports:"*. Off by default: the evals count an out-of-corpus question as correct only when it is refused, so with web search off that route goes to text search, which refuses it. Web pages are untrusted text, so the prompt tells the model to ignore any instructions inside them. One JSON POST, so it uses Python's standard library instead of another package.
-- **Corrective RAG:** grades the retrieved chunks. If they're weak, it rewrites the query and tries again, then falls back to web search.
+- **Corrective RAG** (`agents/corrective.py`, a LangGraph state graph; try it with `scripts/ask.py --corrective "..."`): before answering from text search, the fast model grades the chunks. Built and tested on its own; not yet plugged into the router's text-search route, and not yet measured.
+
+  ```mermaid
+  flowchart TD
+      q["Question"] --> retrieve["retrieve<br/>text search: filters + hybrid + rerank, top 5"]
+      retrieve --> grade{"grade<br/>fast LLM: which chunks are relevant?<br/>are they enough to answer?"}
+      grade -->|"enough"| gen["generate<br/>main LLM answers from the<br/>relevant chunks only, with pages"]
+      grade -->|"not enough, no rewrite yet"| rewrite["rewrite<br/>fast LLM turns the question into a<br/>search query aimed at what's missing"]
+      rewrite --> retrieve
+      grade -->|"still not enough,<br/>some relevant"| gen
+      grade -->|"nothing relevant"| fallback{"fallback"}
+      fallback -->|"WEB_SEARCH=true"| web["Web search (Tavily)"]
+      fallback -->|"off (default)"| refuse["I couldn't find this<br/>in the annual reports."]
+      gen --> out["Answer + steps taken"]
+      web --> out
+      refuse --> out
+  ```
+
+  - **One grading call per search**, not one per chunk: the five chunks go to the fast model together, which keeps a question within the free tier's 8,000 tokens per minute. Grades and rewrites are cached, like the router's picks.
+  - **Relevant chunks are kept across rounds**, so a rewrite adds what was missing (e.g. the second company in a comparison) instead of replacing what was already found.
+  - **The answer model sees only relevant chunks.** That is the "corrective" part: a chunk about a different year or one business segment can't be mistaken for the answer.
+  - **Fails open:** if grading fails, every chunk is kept; if rewriting fails, the same query is searched again. Each node's work is recorded, so the answer shows its path, e.g. `retrieve (5) -> grade 0/5 relevant -> rewrite: ... -> retrieve (5) -> grade 2/5 relevant, enough -> generate`.
+  - **Step limit:** LangGraph stops a run after `AGENT_MAX_STEPS` (12; a normal run takes at most 6), and the question gets the refusal instead of looping.
 - **Self-RAG:** checks that the final answer is backed by its sources, and retries once if it isn't.
 - **Safety limits:** a maximum number of steps and clear error handling on every node, so the loop can't run forever.
 

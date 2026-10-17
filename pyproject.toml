@@ -18,6 +18,7 @@ dependencies = [
     "pgvector>=0.5.1",
     "sqlglot>=25",
     "neo4j>=5.20",
+    "langgraph>=1.2.16",
 ]
 
 [dependency-groups]

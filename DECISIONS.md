@@ -417,3 +417,24 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 - An empty `TAVILY_API_KEY=` (as in `.env.example`) counts as unset.
 
 **Eval evidence:** none recorded (off by default, so no eval row changes). Live check: "What was Apple's revenue in fiscal 2023?" → "From the web, not the annual reports: … about $383.3 billion", citing 2 of 5 results, ~2.7k main-model tokens.
+
+## 2026-10-17 — Corrective RAG as a LangGraph state graph
+
+**Context:** Phase 4. Text search always answers from its top 5 chunks, even when they are about the wrong year, one business segment, or only one of two companies in a comparison. Corrective RAG checks the chunks first. First use of LangGraph in the project (CLAUDE.md: frameworks only when a phase needs one; Phase 4 names LangGraph).
+
+**Options considered:**
+- **Grading:** one fast-model call per chunk (5 calls; ~2.5k tokens each would breach the 8k tokens-per-minute limit within one question) vs **one call grading all chunks together**, returning `{relevant: [numbers], enough, missing}`.
+- **After a rewrite:** replace the first round's chunks vs **keep the relevant ones and add the new ones** (needed for comparisons: round 1 finds one company, round 2 the other).
+- **When the grader or rewriter fails:** stop vs **fail open** (keep all chunks / search again unchanged), since both are improvements on plain text search, not requirements.
+- **Loop control:** a hand-written loop vs **LangGraph** (`StateGraph` with nodes retrieve, grade, rewrite, generate, fallback and one conditional edge), whose `recursion_limit` gives the step limit for free and whose graph is the README diagram.
+
+**Decision:** one batched grading call; relevant chunks kept across rounds; at most `CRAG_MAX_REWRITES=1` rewrite; the main model answers from the relevant chunks only; nothing relevant → web search if `WEB_SEARCH=true`, otherwise the fixed refusal; fail open on grade/rewrite errors; `AGENT_MAX_STEPS=12` (a normal run takes at most 6), past which the question is refused. Grades and rewrites are cached in `data/cache/corrective.json`. Each node appends to a `path` that the answer reports.
+
+**Prompt fixes from trial questions (none from the eval set):**
+- "What was RBC's net income in fiscal 2023?" (not an eval question): round 2 graded a segment table showing a $769 million net loss as "enough", and the answer reported it as RBC's net income. The grading prompt now says a segment's, subsidiary's or region's figure is not the company's unless asked, and unlabelled table figures count only when the passage says what they measure. Re-run: refused instead (the company-wide figure is not in the top 5 for either query; the router sends this kind of question to SQL anyway).
+- "Who won the 2023 Stanley Cup?": the rewrite copied the prompt's examples ("... net income Common Equity Tier 1 ratio"). The examples were trimmed and a "don't add topics" rule added. Rewrites of out-of-corpus questions are still unhelpful (they list the companies' headline metrics), but harmless: both rounds grade 0/5 and the question is refused.
+- "How did RBC's and Scotiabank's dividends per share compare in 2024?": round 1 graded 1/5 relevant (Scotiabank only); the rewrite asked for both; round 2 found 3 relevant, and the answer cites Scotiabank $4.24 and RBC $5.60.
+
+**Cost:** one ~3k-token fast-model call per search (two with a rewrite) plus up to two cross-encoder reranks (10–20 s each on this laptop's CPU). Main-model tokens should fall, since only relevant chunks are sent. Fast-model calls are not counted in Cost/query, as for filters and the router.
+
+**Eval evidence:** not yet measured. Next: `run_evals.py --source corrective` on all questions against the best text stack (0.74 on n=42), on a fresh day's quota. Note that recall@5 for corrective runs measures the chunks the answer model was given (the relevant ones), so it is not directly comparable with text-search recall.

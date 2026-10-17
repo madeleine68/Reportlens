@@ -152,7 +152,7 @@ Keep this section up to date when commands change.
 
 - [ ] LangGraph state graph; router node picks `vector | sql | graph | web | none` (router written by Claude at the owner's request on 2026-10-16: `agents/router.py` + `agents/routed.py` with fallback to vector; route accuracy 0.83 vs 0.71 for always-vector; LangGraph not started; full routed eval pending)
 - [ ] Self-RAG: decide if retrieval is needed; after answering, check the answer is supported and retry once if not
-- [ ] Corrective RAG: grade retrieved chunks; if weak, rewrite the query and retry, then fall back to Tavily (built 2026-10-17 as a LangGraph state graph in `agents/corrective.py`, tested with stubs and on 3 trial questions; not yet measured or plugged into the router; see DECISIONS.md 2026-10-17)
+- [ ] Corrective RAG: grade retrieved chunks; if weak, rewrite the query and retry, then fall back to Tavily (built 2026-10-17 as a LangGraph state graph in `agents/corrective.py`, tested with stubs and on 3 trial questions; the router's text-search route uses it unless `ROUTED_CORRECTIVE=false`; not yet measured; see DECISIONS.md 2026-10-17)
 - [ ] Multi-step questions (e.g. comparing companies across SQL and text)
 - [ ] Max-step limit and clear error handling on every node (routed answers: a source that raises falls back to text search; corrective RAG: `AGENT_MAX_STEPS` as LangGraph's recursion limit, refusal past it, grade/rewrite failures fail open)
 

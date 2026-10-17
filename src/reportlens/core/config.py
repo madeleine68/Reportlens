@@ -98,6 +98,8 @@ class Settings(BaseSettings):
     crag_max_rewrites: int = 1
     # LangGraph's step limit for one question (the longest normal run takes 6 steps).
     agent_max_steps: int = 12
+    # The router's text-search route (and its fallback) runs corrective RAG; false: plain search.
+    routed_corrective: bool = True
 
     # Paths
     data_dir: Path = PROJECT_ROOT / "data"

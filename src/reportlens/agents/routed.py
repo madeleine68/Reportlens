@@ -4,6 +4,9 @@ SQL, the graph and the web answer only what they hold; when they find nothing (n
 answer model says the rows don't answer it) or fail (a network or database error), text search
 gets the question. That keeps a wrong route or a broken tool from costing the answer: SQL
 rightly declines "why" questions, for example.
+
+Text search here is corrective RAG (agents/corrective.py: grade the chunks, rewrite the query if
+they fall short) unless ROUTED_CORRECTIVE=false, which uses plain search.
 """
 
 from collections.abc import Callable
@@ -12,8 +15,10 @@ import psycopg
 from neo4j import Driver
 from pydantic import BaseModel
 
+from reportlens.agents.corrective import Tools, answer_corrective, crag_cache, default_tools
 from reportlens.agents.router import Known, Route, route_question
 from reportlens.core import llm
+from reportlens.core.config import get_settings
 from reportlens.core.logging import get_logger
 from reportlens.generation import prompts
 from reportlens.generation.answer import Answer, answer_question, is_not_found
@@ -59,13 +64,30 @@ def no_lookup_answer(question: str, chat: Callable[..., llm.LLMResponse] = llm.c
     )
 
 
+def corrective_answerer(conn: psycopg.Connection) -> AnswerFn:
+    """Text search through corrective RAG; its tools are built on the first question."""
+    tools: list[Tools] = []
+
+    def answer(question: str) -> Answer:
+        if not tools:
+            tools.append(default_tools(conn, crag_cache()))
+        return answer_corrective(question, tools[0]).answer
+
+    return answer
+
+
 def default_answerers(
     conn: psycopg.Connection, reader: psycopg.Connection, driver: Driver | None
 ) -> dict[str, AnswerFn]:
     """One answer function per source. Web search is off unless WEB_SEARCH=true: then text
     search, which refuses out-of-corpus questions, takes the 'web' route."""
+    vector = (
+        corrective_answerer(conn)
+        if get_settings().routed_corrective
+        else lambda q: answer_question(conn, q)
+    )
     answerers: dict[str, AnswerFn] = {
-        "vector": lambda q: answer_question(conn, q),
+        "vector": vector,
         "sql": lambda q: as_answer(answer_with_sql(reader, q)),
         "none": no_lookup_answer,
     }

@@ -437,4 +437,6 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 
 **Cost:** one ~3k-token fast-model call per search (two with a rewrite) plus up to two cross-encoder reranks (10–20 s each on this laptop's CPU). Main-model tokens should fall, since only relevant chunks are sent. Fast-model calls are not counted in Cost/query, as for filters and the router.
 
+**In the router:** the router's `vector` route, and the fallback when SQL, the graph or the web find nothing, now run corrective RAG (`ROUTED_CORRECTIVE=true`, the default; `false` restores plain search so the routed eval can be run both ways). Live check: "Why did BCE's employee headcount change in 2024?" → routed to vector → grade 3/5 relevant, enough → answer citing BCE 2024 pp. 82–83 and 46–47.
+
 **Eval evidence:** not yet measured. Next: `run_evals.py --source corrective` on all questions against the best text stack (0.74 on n=42), on a fresh day's quota. Note that recall@5 for corrective runs measures the chunks the answer model was given (the relevant ones), so it is not directly comparable with text-search recall.

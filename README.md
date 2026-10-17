@@ -303,13 +303,14 @@ flowchart TD
     classDef planned fill:#f1f3f5,stroke:#868e96,color:#495057,stroke-dasharray: 5 5
     classDef done fill:#d4edda,stroke:#28a745,color:#155724
     class q,router,vec,sql,kg,gen,out,web done
-    class grade,check planned
+    class grade done
+    class check planned
 ```
 
 - **Router** (`agents/router.py`, `agents/routed.py`; try it with `scripts/ask.py --routed "..."`): the fast LLM picks one source with a one-line reason, from a short description of what each source is good at, taken from the Phase 3 evals (SQL for figures, trends and comparisons; the graph for officer, subsidiary and segment changes across years; text search for everything else and as the default; web for anything the reports don't cover; no lookup only to define a finance term). If SQL or the graph finds nothing, text search answers instead, and the answer reports the path taken (e.g. `sql -> vector`). If the router call itself fails, the question goes to text search. If a tool fails (a network or database error), text search answers too.
   - **Route accuracy** (`evals/route_accuracy.py`, fast-model calls only): on the 42 questions that already have scores from two or more sources, the router picks a best-scoring source for **35 (0.83)**, against 30 for always using text search and 28 for always using SQL. Its misses: BCE's exact headcount (only in the text, but it looks like a SQL figure), two relationship questions sent to the graph or SQL that text search answered, and the CFO-change question, which it sent to text search instead of the graph.
 - **Web search** (`sources/web_tool.py`): with `WEB_SEARCH=true` and a `TAVILY_API_KEY`, the router's web route asks Tavily for the top 5 results, and the main LLM answers only from them, cites each URL, and starts with *"From the web, not the annual reports:"*. Off by default: the evals count an out-of-corpus question as correct only when it is refused, so with web search off that route goes to text search, which refuses it. Web pages are untrusted text, so the prompt tells the model to ignore any instructions inside them. One JSON POST, so it uses Python's standard library instead of another package.
-- **Corrective RAG** (`agents/corrective.py`, a LangGraph state graph; try it with `scripts/ask.py --corrective "..."`): before answering from text search, the fast model grades the chunks. Built and tested on its own; not yet plugged into the router's text-search route, and not yet measured.
+- **Corrective RAG** (`agents/corrective.py`, a LangGraph state graph; try it with `scripts/ask.py --corrective "..."`): before answering from text search, the fast model grades the chunks. The router's text-search route (and its fallback when SQL or the graph finds nothing) runs through it; `ROUTED_CORRECTIVE=false` switches back to plain search for comparison. Not yet measured.
 
   ```mermaid
   flowchart TD

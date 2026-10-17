@@ -4,9 +4,17 @@ import pytest
 from pydantic import BaseModel
 
 import reportlens.agents.routed as routed_module
-from reportlens.agents.routed import RoutedAnswer, answer_routed, ask, no_lookup_answer
+from reportlens.agents.corrective import CorrectiveAnswer
+from reportlens.agents.routed import (
+    RoutedAnswer,
+    answer_routed,
+    ask,
+    default_answerers,
+    no_lookup_answer,
+)
 from reportlens.agents.router import Route, route_question, router_messages
 from reportlens.core import llm
+from reportlens.core.config import get_settings
 from reportlens.generation import prompts
 from reportlens.generation.answer import Answer
 from reportlens.ingest.graph import FactCache
@@ -140,3 +148,32 @@ def test_no_lookup_refusal_is_not_found() -> None:
         )
 
     assert not no_lookup_answer("Who won the 2023 Stanley Cup?", chat).found
+
+
+def test_the_vector_route_uses_corrective_rag_unless_switched_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(routed_module, "default_tools", lambda conn, cache: "tools")
+    monkeypatch.setattr(routed_module, "crag_cache", lambda: None)
+    monkeypatch.setattr(
+        routed_module,
+        "answer_corrective",
+        lambda q, tools: (
+            calls.append(f"corrective {tools}")
+            or CorrectiveAnswer(answer=_answer(q, True, "graded"), path=["generate"])
+        ),
+    )
+    monkeypatch.setattr(
+        routed_module,
+        "answer_question",
+        lambda conn, q: calls.append("plain") or _answer(q, True, "plain"),
+    )
+    assert default_answerers(None, None, None)["vector"]("q").text == "graded"
+    monkeypatch.setenv("ROUTED_CORRECTIVE", "false")
+    get_settings.cache_clear()
+    try:
+        assert default_answerers(None, None, None)["vector"]("q").text == "plain"
+    finally:
+        get_settings.cache_clear()
+    assert calls == ["corrective tools", "plain"]

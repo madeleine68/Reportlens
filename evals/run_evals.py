@@ -93,8 +93,9 @@ def main() -> int:
         def answer_from_graph(_conn: object, question: str) -> Answer:
             return as_answer(answer_with_graph(driver, question))
 
+        answerers = default_answerers(conn, reader, driver) if args.source == "routed" else {}
+
         def answer_routed_fn(_conn: object, question: str) -> Answer:
-            answerers = default_answerers(conn, reader, driver)
             routed = ask(question, known_values(conn), answerers, route_cache())
             routes[question] = " -> ".join(routed.path)
             return routed.answer

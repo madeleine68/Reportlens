@@ -121,6 +121,8 @@ def answer_routed(question: str, route: Route, answerers: dict[str, AnswerFn]) -
         else:
             try:
                 answer = answerers[source](question)
+            except llm.RateLimitError:
+                raise  # out of quota, not a broken tool: falling back would hide it
             except Exception as err:  # noqa: BLE001  # a broken tool falls back to text search
                 log.warning("routed.source_failed source=%s error=%s", source, err)
                 path[-1] = f"{source} (error)"

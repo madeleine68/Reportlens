@@ -101,6 +101,8 @@ uv run python scripts/ask.py --routed "Who replaced Nadine Ahn as RBC's CFO?"   
 WEB_SEARCH=true uv run python scripts/ask.py --routed "What was Apple's revenue in 2023?"   # Phase 4: web route (needs TAVILY_API_KEY)
 uv run python scripts/ask.py --corrective "How did RBC's and Scotiabank's dividends compare in 2024?"   # Phase 4: corrective RAG, prints its steps
 uv run python evals/run_evals.py --name "corrective" --source corrective   # Phase 4: corrective RAG eval (needs a day's quota)
+uv run python evals/run_evals.py --name "corrective" --source corrective --resume   # continue a run stopped by the daily limit (exit 3)
+nohup caffeinate -i scripts/eval_loop.sh >> data/cache/evals_run.log 2>&1 &   # Phase 4 evals back to back, resuming after each daily limit
 uv run uvicorn reportlens.api.main:app --reload      # start API
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models

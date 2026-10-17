@@ -9,7 +9,7 @@ import time
 from functools import lru_cache
 from typing import Any, Literal
 
-from openai import BadRequestError, OpenAI
+from openai import BadRequestError, OpenAI, RateLimitError
 from pydantic import BaseModel, ValidationError
 
 from reportlens.core.config import get_settings
@@ -19,6 +19,11 @@ log = get_logger(__name__)
 
 Tier = Literal["main", "fast", "vision"]
 Message = dict[str, Any]  # content is a string, or a list of text and image parts (vision)
+
+
+def is_daily_limit(err: BaseException) -> bool:
+    """True for the provider's tokens-per-day limit (wait hours), not the per-minute one."""
+    return isinstance(err, RateLimitError) and "per day" in str(err)
 
 
 class LLMResponse(BaseModel):

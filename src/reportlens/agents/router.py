@@ -62,6 +62,8 @@ def route_question(
         return route
     try:
         route = structured(messages, Route, tier="fast")
+    except llm.RateLimitError:
+        raise  # out of quota: falling back would silently change the route (and the evals)
     except Exception as err:  # noqa: BLE001  # any router failure falls back to the default
         log.warning("router.failed error=%s", err)
         return Route(source="vector", reason=f"router failed ({type(err).__name__}); default")

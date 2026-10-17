@@ -440,3 +440,17 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 **In the router:** the router's `vector` route, and the fallback when SQL, the graph or the web find nothing, now run corrective RAG (`ROUTED_CORRECTIVE=true`, the default; `false` restores plain search so the routed eval can be run both ways). Live check: "Why did BCE's employee headcount change in 2024?" → routed to vector → grade 3/5 relevant, enough → answer citing BCE 2024 pp. 82–83 and 46–47.
 
 **Eval evidence:** not yet measured. Next: `run_evals.py --source corrective` on all questions against the best text stack (0.74 on n=42), on a fresh day's quota. Note that recall@5 for corrective runs measures the chunks the answer model was given (the relevant ones), so it is not directly comparable with text-search recall.
+
+## 2026-10-17 — Eval runs that span several days; rate limits are never "failed open"
+
+**Context:** A full routed or corrective eval needs roughly 130k main-model and 400–500k fast-model tokens (the judge makes 2 fast calls per question, plus filters, router and grading); the free tier allows about 200k per model per day. A run that hits the daily limit used to record errors for the rest of the questions and couldn't be recorded at all.
+
+**Options considered:** a smaller question set (not comparable with earlier rows); a different judge model with its own quota (scores not comparable with earlier rows); a paid tier (the owner's call); **resuming runs**.
+
+**Decision:**
+- `run_evals.py --resume` continues the newest run file of the same name, from any day: successful questions are kept, errored or missing ones are asked again. On the provider's daily limit (`llm.is_daily_limit`: a 429 that says "per day") the run stops at once and exits with 3. results.md still gets a row only when every question succeeded.
+- `scripts/eval_loop.sh` runs the routed eval (with corrective RAG) and then the corrective eval with the best text stack's settings, sleeping 3 hours on exit 3.
+- **Rate limits now pass through every fail-open handler:** the router (which falls back to vector on any error), routed answers (which fall back to text search when a source raises) and corrective grading and rewriting (which keep all chunks / the query). Otherwise running out of quota mid-eval would quietly measure a different system (e.g. every question routed to vector) instead of stopping. This touches `agents/router.py`, which the owner reviews.
+- The plain routed run (`ROUTED_CORRECTIVE=false`) was dropped from the queue: the text stack's best row (0.74) already gives the comparison point, and it would cost another ~3 days of quota.
+
+**Note:** the routed and corrective rows will be measured over several days. Answers and judge verdicts don't depend on the day, but latency may.

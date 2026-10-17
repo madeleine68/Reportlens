@@ -11,8 +11,9 @@ A LangGraph state graph with five nodes:
    the fixed refusal.
 
 Grading and rewriting are improvements, not requirements: if either fails, the graph carries on
-as plain text search would (all chunks kept / the query unchanged). A run longer than
-AGENT_MAX_STEPS stops with the refusal instead of looping.
+as plain text search would (all chunks kept / the query unchanged). Rate limits are the
+exception: they are raised, so an eval run stops instead of quietly measuring plain search.
+A run longer than AGENT_MAX_STEPS stops with the refusal instead of looping.
 """
 
 import operator
@@ -177,6 +178,8 @@ def build_graph(tools: Tools, max_rewrites: int):  # noqa: ANN201  # LangGraph's
             return {"enough": False, "missing": "no results", "path": ["grade (nothing found)"]}
         try:
             verdict = tools.grade(state["question"], chunks)
+        except llm.RateLimitError:
+            raise  # out of quota: keeping every chunk would quietly turn this into plain search
         except Exception as err:  # noqa: BLE001  # grading is optional: keep everything
             log.warning("corrective.grade_failed error=%s", err)
             relevant = _merge(state.get("relevant", []), chunks)
@@ -200,6 +203,8 @@ def build_graph(tools: Tools, max_rewrites: int):  # noqa: ANN201  # LangGraph's
         rewrites = state.get("rewrites", 0) + 1
         try:
             query = tools.rewrite(state["question"], state.get("missing", ""))
+        except llm.RateLimitError:
+            raise
         except Exception as err:  # noqa: BLE001  # rewriting is optional: search again as is
             log.warning("corrective.rewrite_failed error=%s", err)
             return {"rewrites": rewrites, "path": ["rewrite failed"]}

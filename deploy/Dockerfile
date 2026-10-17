@@ -1,12 +1,12 @@
-# The API + UI (Phase 5), for Cloud Run (scripts/deploy_cloudrun.py) or a Hugging Face Docker
-# Space (scripts/deploy_space.py). Built from the folder both assemble: requirements.txt, src/.
+# The API + UI on Cloud Run (Phase 5). Built by Cloud Build from the folder
+# scripts/deploy_cloudrun.py assembles: requirements.txt, src/.
 FROM python:3.12-slim
 
-# Spaces run the container as user 1000 (Cloud Run doesn't mind); give it a home and the app's data folder (caches).
+# Run as an unprivileged user with a home and the app's data folder (caches).
 RUN useradd -m -u 1000 user
 WORKDIR /app
 
-# CPU-only PyTorch: the Space has no GPU, and the CUDA build is ~2 GB larger.
+# CPU-only PyTorch: Cloud Run has no GPU here, and the CUDA build is ~2 GB larger.
 RUN pip install --no-cache-dir uv
 COPY requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt \

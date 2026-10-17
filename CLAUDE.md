@@ -55,7 +55,7 @@ reportlens/
 ├── DECISIONS.md          # decision log, updated as we go
 ├── README.md
 ├── docker-compose.yml    # postgres+pgvector, neo4j (Phase 3)
-├── deploy/               # Dockerfile, env.deploy.example, space_README.md (Phase 5: Cloud Run; Hugging Face Space needs PRO)
+├── deploy/               # Dockerfile, env.deploy.example (Phase 5: Cloud Run)
 ├── .env.example
 ├── pyproject.toml
 ├── src/reportlens/
@@ -110,7 +110,6 @@ uv run python scripts/deploy_data.py                 # Phase 5: copy local Postg
 uv run python scripts/deploy_cloudrun.py --setup     # Phase 5, once: enable APIs, image registry, service-account roles (needs gcloud auth login)
 uv run python scripts/deploy_cloudrun.py --secrets   # Phase 5: store/refresh secrets in Secret Manager from .env.deploy
 uv run python scripts/deploy_cloudrun.py             # Phase 5: build with Cloud Build and deploy to Cloud Run; prints the URL
-uv run python scripts/deploy_space.py --secrets      # alternative: a Hugging Face Docker Space (needs PRO); then without --secrets to upload
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
 uv run ruff check . && uv run ruff format .          # lint and format

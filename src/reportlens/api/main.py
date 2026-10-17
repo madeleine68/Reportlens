@@ -167,6 +167,6 @@ def ask_stream(
     return StreamingResponse(
         stream_events(body.question, body.source, resources, answer_fn),
         media_type="text/event-stream",
-        # no-buffering: proxies (e.g. Hugging Face's) must pass each event on at once
+        # no-buffering: proxies in front of the app must pass each event on at once
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

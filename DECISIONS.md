@@ -522,3 +522,4 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 - Found while copying the data: the SQL reader role's `GRANT CONNECT` used `POSTGRES_DB` (`reportlens`) instead of the connected database (Neon's `neondb`), which would also have crashed the app at startup; fixed to use the connection's database.
 
 **Evidence:** Neon has 6,075 chunks and 671 `financials` rows; the reader role can read `financials`, and a `DELETE` or a read of `chunks` is refused there. AuraDB has 148 nodes and 410 relationships, as locally. 3 new tests (daily count in Postgres, the hourly check before taking a daily slot, the memory fallback); 358 pass.
+- Later the same day (owner's request): the Hugging Face path was removed (`scripts/deploy_space.py`, `deploy/space_README.md`, the `HF_*` settings); its folder assembly moved into `scripts/deploy_cloudrun.py`.

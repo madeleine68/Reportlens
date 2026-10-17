@@ -402,7 +402,7 @@ flowchart LR
   - It reads the stream with `fetch()`, because `EventSource` only makes GET requests and `/ask/stream` is a POST.
   - Answers and chunks (web pages above all) are inserted as text, never as HTML.
   - Light and dark mode follow the system; the layout fits a phone.
-- **Deploy** (live at https://reportlens-400767792007.us-east1.run.app; ask the owner for the demo password): the API + UI on **Google Cloud Run** (2 GB, scales to zero when idle, so the first question after a quiet spell waits ~30–60 s while the models load; within Cloud Run's monthly free allowance at demo traffic), Postgres on **Neon** and the graph on **Neo4j AuraDB Free**. The first plan, a Hugging Face Docker Space, now needs a PRO subscription; `scripts/deploy_space.py` still works for anyone with one.
+- **Deploy** (live at https://reportlens-400767792007.us-east1.run.app; ask the owner for the demo password): the API + UI on **Google Cloud Run** (2 GB, scales to zero when idle, so the first question after a quiet spell waits ~30–60 s while the models load; within Cloud Run's monthly free allowance at demo traffic), Postgres on **Neon** and the graph on **Neo4j AuraDB Free**. (A Hugging Face Docker Space was the first plan; it now needs a PRO subscription.)
 
   ```mermaid
   flowchart LR

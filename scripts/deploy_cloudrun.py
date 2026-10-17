@@ -1,7 +1,8 @@
 """Deploy the API + UI to Google Cloud Run (Phase 5).
 
-The image is built by Cloud Build from the same small folder deploy_space.py assembles (code,
-requirements.txt, Dockerfile), so nothing large is uploaded and no local Docker is needed.
+The image is built by Cloud Build from a small folder assembled here (src/reportlens/, the
+locked runtime requirements with CPU-only torch, deploy/Dockerfile), so nothing large is
+uploaded and no local Docker is needed.
 The service: 2 GiB, 1 CPU, scales to zero when idle, at most one instance (the per-visitor
 hourly limit is counted in memory), public. Secrets live in Secret Manager; everything else is
 a plain environment variable.
@@ -17,13 +18,81 @@ Usage, in order (needs `gcloud auth login` first):
 
 import argparse
 import json
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from deploy_space import SECRETS, VARIABLES, assemble, deploy_values  # noqa: E402
+from dotenv import dotenv_values
+
+ROOT = Path(__file__).resolve().parents[1]
+DEPLOY_ENV = ROOT / ".env.deploy"
+# Stored in Secret Manager, readable only by the running service.
+SECRETS = [
+    "LLM_API_KEY",
+    "DATABASE_URL",
+    "NEO4J_PASSWORD",
+    "SQL_READER_PASSWORD",
+    "DEMO_PASSWORD",
+    "TAVILY_API_KEY",
+]
+# Plain environment variables, visible in the service's settings.
+VARIABLES = [
+    "LLM_BASE_URL",
+    "LLM_MODEL_MAIN",
+    "LLM_MODEL_FAST",
+    "NEO4J_URI",
+    "NEO4J_USER",
+    "RATE_LIMIT_PER_HOUR",
+    "DAILY_QUESTION_CAP",
+    "WEB_SEARCH",
+    "SELF_RAG",
+    "ROUTED_CORRECTIVE",
+]
+
+
+def deploy_values() -> dict[str, str]:
+    """.env.deploy, with .env filling in what it leaves out (e.g. the LLM settings)."""
+    local = {k: v for k, v in dotenv_values(ROOT / ".env").items() if v}
+    deploy = {k: v for k, v in dotenv_values(DEPLOY_ENV).items() if v}
+    return {**{k: local[k] for k in local if k.startswith("LLM_")}, **deploy}
+
+
+def runtime_requirements() -> str:
+    """The locked runtime dependencies for Linux, with CPU-only torch and no CUDA packages."""
+    exported = subprocess.run(
+        [
+            "uv",
+            "export",
+            "--no-default-groups",
+            "--no-hashes",
+            "--no-emit-project",
+            "--format",
+            "requirements-txt",
+            "--quiet",
+        ],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    lines = [line for line in exported.splitlines() if not re.match(r"(nvidia-|triton)", line)]
+    return "\n".join(re.sub(r"^torch==([\d.]+)", r"torch==\1+cpu", line) for line in lines) + "\n"
+
+
+def assemble(folder: Path) -> list[Path]:
+    """Copy what the image needs into `folder` (no PDFs, data/ or .env); return its files."""
+    shutil.copytree(
+        ROOT / "src" / "reportlens",
+        folder / "src" / "reportlens",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    (folder / "requirements.txt").write_text(runtime_requirements())
+    shutil.copy(ROOT / "deploy" / "Dockerfile", folder / "Dockerfile")
+    return sorted(p.relative_to(folder) for p in folder.rglob("*") if p.is_file())
+
 
 SERVICE = "reportlens"
 REPOSITORY = "reportlens"  # Artifact Registry repository for the image

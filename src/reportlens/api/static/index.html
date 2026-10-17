@@ -9,14 +9,14 @@
     --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e3de;
     --accent: #2f6fdf; --accent-soft: #e8effc; --ok: #1f7a3f; --ok-soft: #e3f3e8;
     --warn: #9a6200; --warn-soft: #fbf0dc; --bad: #b42318; --bad-soft: #fde8e6;
-    --code: #f1f1ee;
+    --code: #f1f1ee; --shimmer: #ececea;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg: #151515; --panel: #1e1e1e; --text: #ececea; --muted: #a0a09a; --line: #333331;
       --accent: #7aa7ff; --accent-soft: #1d2a44; --ok: #6fcf8f; --ok-soft: #173222;
       --warn: #f0b85a; --warn-soft: #3a2c12; --bad: #ff8a80; --bad-soft: #3d1b18;
-      --code: #262624;
+      --code: #262624; --shimmer: #2c2c2a;
     }
   }
   * { box-sizing: border-box; }
@@ -25,28 +25,114 @@
     font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
   main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
-  h1 { font-size: 22px; margin: 0 0 2px; }
+  a { color: var(--accent); }
+  h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
+  h1 .lens { color: var(--accent); }
   h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
        margin: 0 0 10px; }
-  .sub { color: var(--muted); margin: 0 0 18px; }
+  h3 { font-size: 14px; margin: 14px 0 6px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+           flex-wrap: wrap; }
+  header nav { font-size: 13px; }
+  .sub { color: var(--muted); margin: 4px 0 0; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line);
+          color: var(--muted); background: var(--panel); }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
            padding: 16px; margin-top: 14px; }
+
+  /* "What is this?" */
+  details.about > summary { cursor: pointer; font-weight: 600; list-style: none; }
+  details.about > summary::-webkit-details-marker { display: none; }
+  details.about > summary::before { content: "▸"; display: inline-block; width: 1em;
+                                    color: var(--muted); transition: transform .2s; }
+  details.about[open] > summary::before { transform: rotate(90deg); }
+  .about p { margin: 8px 0; }
+  .flow { display: flex; align-items: stretch; gap: 6px; margin: 12px 0 4px; flex-wrap: wrap; }
+  .flow .box { flex: 1 1 120px; border: 1px solid var(--line); border-radius: 8px;
+               padding: 8px 10px; font-size: 13px; background: var(--bg); }
+  .flow .box b { display: block; font-size: 13px; }
+  .flow .box span { color: var(--muted); font-size: 12px; }
+  .flow .arrow { align-self: center; color: var(--muted); }
+  .techniques { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+                margin: 0; padding: 0; list-style: none; }
+  .techniques li { font-size: 13px; border-left: 3px solid var(--accent-soft); padding: 2px 0 2px 8px; }
+  .techniques li b { display: block; }
+  .techniques .state { font-size: 11px; color: var(--muted); }
+
+  /* the question form */
   form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   textarea { flex: 1 1 100%; min-height: 64px; resize: vertical; padding: 10px; font: inherit;
              color: var(--text); background: var(--panel); border: 1px solid var(--line);
              border-radius: 8px; }
+  textarea:focus, select:focus, input:focus { outline: 2px solid var(--accent-soft);
+                                               border-color: var(--accent); }
   input[type=password] { font: inherit; padding: 8px 10px; border-radius: 8px; color: var(--text);
                          border: 1px solid var(--line); background: var(--panel); }
   select, button { font: inherit; padding: 8px 12px; border-radius: 8px;
                    border: 1px solid var(--line); background: var(--panel); color: var(--text); }
   button[type=submit] { background: var(--accent); border-color: var(--accent); color: #fff;
-                        font-weight: 600; margin-left: auto; cursor: pointer; }
+                        font-weight: 600; margin-left: auto; cursor: pointer;
+                        transition: transform .1s, filter .2s; }
+  button[type=submit]:hover { filter: brightness(1.08); }
+  button[type=submit]:active { transform: scale(.97); }
   button[disabled] { opacity: .6; cursor: wait; }
-  .examples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-  .examples button { font-size: 13px; padding: 4px 10px; color: var(--muted); cursor: pointer; }
-  ol.steps { margin: 0; padding-left: 20px; }
-  ol.steps li { margin: 2px 0; }
-  .stage { font-size: 12px; color: var(--muted); margin-right: 6px; }
+  .hint { flex: 1 1 100%; font-size: 13px; color: var(--muted); margin: 0; }
+  .examples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .examples button { font-size: 13px; padding: 4px 10px; color: var(--muted); cursor: pointer;
+                     transition: border-color .2s, color .2s; }
+  .examples button:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* progress: the pipeline strip and the steps */
+  .progress-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .timer { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pipeline { display: flex; gap: 4px; margin: 4px 0 14px; padding: 0; list-style: none; }
+  .pipeline li { flex: 1; min-width: 0; text-align: center; font-size: 12px; color: var(--muted);
+                 position: relative; padding-top: 30px; transition: opacity .3s; }
+  .pipeline li::before { content: ""; position: absolute; top: 4px; left: 50%; width: 20px; height: 20px;
+                         margin-left: -10px; border-radius: 50%; border: 2px solid var(--line);
+                         background: var(--panel); transition: background .3s, border-color .3s; }
+  .pipeline li::after { content: ""; position: absolute; top: 14px; left: calc(50% + 14px);
+                        right: calc(-50% + 14px); height: 2px; background: var(--line);
+                        transition: background .4s; }
+  .pipeline li:last-child::after { display: none; }
+  .pipeline li .detail { display: block; font-size: 11px; min-height: 1.4em; overflow: hidden;
+                         text-overflow: ellipsis; white-space: nowrap; }
+  .pipeline li.active { color: var(--accent); font-weight: 600; }
+  .pipeline li.active::before { border-color: var(--accent); animation: pulse 1.2s ease-out infinite; }
+  .pipeline li.done { color: var(--text); }
+  .pipeline li.done::before { content: "✓"; color: #fff; background: var(--ok); border-color: var(--ok);
+                              font-size: 12px; line-height: 16px; font-weight: 700; }
+  .pipeline li.done::after { background: var(--ok); }
+  .pipeline li.skipped { opacity: .35; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 var(--accent-soft); }
+    70% { box-shadow: 0 0 0 9px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  ol.steps { margin: 0; padding: 0; list-style: none; }
+  ol.steps li { margin: 4px 0; display: flex; gap: 8px; align-items: baseline;
+                animation: slide-in .35s ease-out both; }
+  .stage { font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+           background: var(--accent-soft); color: var(--accent); }
+  .stage.corrective { background: var(--warn-soft); color: var(--warn); }
+  .stage.self-rag { background: var(--ok-soft); color: var(--ok); }
+  .stage.server { background: var(--code); color: var(--muted); }
+  ol.steps li.current::after { content: ""; width: 10px; height: 10px; flex: none; align-self: center;
+                               border: 2px solid var(--accent); border-right-color: transparent;
+                               border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes slide-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .waking { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+  .skeleton { margin-top: 12px; }
+  .skeleton div { height: 12px; border-radius: 6px; margin: 8px 0;
+                  background: linear-gradient(90deg, var(--code) 25%, var(--shimmer) 50%, var(--code) 75%);
+                  background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
+  .skeleton div:nth-child(2) { width: 85%; } .skeleton div:nth-child(3) { width: 60%; }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+  /* the answer */
+  .reveal { animation: slide-in .45s ease-out both; }
   .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
   .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--code);
            color: var(--muted); }
@@ -54,12 +140,16 @@
   .badge.warn { background: var(--warn-soft); color: var(--warn); }
   .badge.bad { background: var(--bad-soft); color: var(--bad); }
   .answer { font-size: 16px; white-space: pre-wrap; margin: 0; }
-  a.cite { color: var(--accent); text-decoration: none; font-weight: 600; }
+  a.cite { color: var(--accent); text-decoration: none; font-weight: 600; border-radius: 4px;
+           padding: 0 1px; transition: background .2s; }
+  a.cite:hover { background: var(--accent-soft); }
   .sources { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-  .source { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .source { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+            animation: slide-in .4s ease-out both; transition: border-color .2s, background .2s; }
+  .source.lit { border-color: var(--accent); background: var(--accent-soft); }
   .source b { margin-right: 6px; color: var(--accent); }
-  .source a { color: var(--accent); word-break: break-all; }
-  details.chunk { border-top: 1px solid var(--line); padding: 8px 0; }
+  .source a { word-break: break-all; }
+  details.chunk { border-top: 1px solid var(--line); padding: 8px 0; transition: background .4s; }
   details.chunk summary { cursor: pointer; }
   details.chunk.cited summary { font-weight: 600; }
   details.chunk.flash { background: var(--accent-soft); }
@@ -68,13 +158,70 @@
   .error { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
   .hidden { display: none; }
   .muted { color: var(--muted); }
+  footer { margin-top: 28px; font-size: 12px; color: var(--muted); text-align: center; }
+
+  @media (max-width: 560px) {
+    .flow { flex-direction: column; }
+    .flow .box { flex: none; }
+    .flow .arrow { transform: rotate(90deg); }
+    .pipeline li { font-size: 11px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <h1>ReportLens</h1>
-  <p class="sub">Questions about RBC, Scotiabank and BCE annual reports (fiscal 2021–2024),
-    answered with page citations.</p>
+  <header>
+    <div>
+      <h1>Report<span class="lens">Lens</span></h1>
+      <p class="sub">Ask questions about Canadian companies' annual reports. Every answer cites
+        the pages it came from.</p>
+    </div>
+    <nav><a href="https://github.com/madeleine68/Reportlens" target="_blank"
+            rel="noopener noreferrer">Source on GitHub</a></nav>
+  </header>
+  <div class="chips" id="corpus"></div>
+
+  <details class="panel about" id="about">
+    <summary>What is this?</summary>
+    <p>ReportLens answers questions about the annual reports of <b>RBC</b>, <b>Scotiabank</b> and
+      <b>BCE</b> for fiscal 2021–2024: 12 reports split into about 6,000 passages, plus the
+      headline figures pulled out of their financial tables and a knowledge graph of segments,
+      subsidiaries and executives. It's a portfolio project that puts several retrieval
+      (RAG) techniques side by side, with an evaluation suite measuring what each one adds.</p>
+
+    <h3>How a question is answered</h3>
+    <div class="flow" aria-label="Question, router, search, answer, check">
+      <div class="box"><b>Question</b><span>yours</span></div>
+      <div class="arrow">→</div>
+      <div class="box"><b>Router</b><span>a small model picks the best source</span></div>
+      <div class="arrow">→</div>
+      <div class="box"><b>Search</b><span>report text, financial tables (SQL) or the graph</span></div>
+      <div class="arrow">→</div>
+      <div class="box"><b>Answer</b><span>written only from what was found, with [n] citations</span></div>
+      <div class="arrow">→</div>
+      <div class="box"><b>Check</b><span>every claim traced back to a source</span></div>
+    </div>
+
+    <h3>Techniques inside</h3>
+    <ul class="techniques" id="techniques">
+      <li><b>Hybrid search</b>keyword and meaning-based search, merged by rank</li>
+      <li><b>Reranking</b>a cross-encoder rereads the top 40 passages and keeps the best 5</li>
+      <li><b>Metadata filters</b>"RBC 2023" in a question limits the search to that report</li>
+      <li><b>Corrective RAG</b>grades what it found; rewrites the query if it isn't enough</li>
+      <li data-flag="self_rag"><b>Self-RAG</b>checks the answer against its sources and revises it
+        <span class="state"></span></li>
+      <li><b>Text-to-SQL</b>the model writes a read-only query over the extracted figures</li>
+      <li><b>Knowledge graph</b>Cypher queries over who runs and owns what</li>
+      <li><b>Agentic router</b>picks the source, and falls back to text search if it fails</li>
+    </ul>
+
+    <p class="muted">Watch the progress panel while it answers: each step appears as it happens.
+      The demo is password-protected and rate-limited because it runs on a free LLM quota.
+      Answers can be wrong; check the cited pages.</p>
+  </details>
 
   <form id="ask" class="panel">
     <textarea id="question" maxlength="500" required
@@ -92,32 +239,49 @@
       <input id="password" type="password" autocomplete="current-password" size="14">
     </span>
     <button type="submit" id="go">Ask</button>
+    <p class="hint" id="hint"></p>
     <div class="examples" id="examples"></div>
   </form>
 
   <section id="error" class="panel error hidden" role="alert"></section>
 
-  <section id="progress" class="panel hidden">
-    <h2>How it's answering</h2>
+  <section id="progress" class="panel hidden" aria-live="polite">
+    <div class="progress-head">
+      <h2>How it's answering</h2>
+      <span class="timer" id="timer"></span>
+    </div>
+    <ol class="pipeline" id="pipeline">
+      <li data-node="route">Route<span class="detail"></span></li>
+      <li data-node="search">Search<span class="detail"></span></li>
+      <li data-node="grade">Grade<span class="detail"></span></li>
+      <li data-node="answer">Answer<span class="detail"></span></li>
+      <li data-node="check">Check<span class="detail"></span></li>
+    </ol>
     <ol class="steps" id="steps"></ol>
+    <p class="waking hidden" id="waking">Still working. If the server was asleep, the first
+      answer takes 30–60 s while it loads its models; later ones are quicker.</p>
+    <div class="skeleton" id="skeleton"><div></div><div></div><div></div></div>
   </section>
 
   <section id="result" class="hidden">
-    <div class="panel">
+    <div class="panel reveal">
       <h2>Answer</h2>
       <div class="badges" id="badges"></div>
       <p class="answer" id="answer"></p>
       <pre class="query hidden" id="query"></pre>
     </div>
-    <div class="panel" id="sources-panel">
+    <div class="panel reveal" id="sources-panel">
       <h2>Sources cited</h2>
       <div class="sources" id="sources"></div>
     </div>
-    <div class="panel">
+    <div class="panel reveal">
       <h2>Everything the answer model saw</h2>
       <div id="chunks"></div>
     </div>
   </section>
+
+  <footer>ReportLens · answers by an LLM from the reports' text, tables and graph ·
+    not financial advice</footer>
 </main>
 
 <script>
@@ -127,7 +291,16 @@ const EXAMPLES = [
   "Why did BCE's employee headcount change in 2024?",
   "Which bank had the higher CET1 ratio in 2024, RBC or Scotiabank?",
 ];
+const HINTS = {
+  auto: "A small model reads the question and picks text search, SQL or the graph.",
+  text: "Hybrid search over the report text, reranked; the answer cites the passages it used.",
+  corrective: "Text search that grades what it found and rewrites the query when it isn't enough.",
+  sql: "The model writes a read-only SQL query over the figures extracted from the tables.",
+  graph: "The model writes a Cypher query over segments, subsidiaries and executives.",
+};
+const ROUTE_NAMES = { vector: "text", sql: "SQL", graph: "graph", web: "web", none: "none" };
 const $ = (id) => document.getElementById(id);
+let selfRag = false;
 
 // Build elements with text only: answers and chunks (web pages above all) are untrusted.
 function el(tag, attrs = {}, ...children) {
@@ -148,8 +321,88 @@ function sourceLabel(c) {
   return c.company === "web" ? "web" : `${c.company.toUpperCase()} ${c.year}, ${pages(c.pages)}`;
 }
 
+// --- the pipeline strip: each event marks what just finished and what runs next ----------
+
+function node(name) { return $("pipeline").querySelector(`[data-node="${name}"]`); }
+
+function setNode(name, state, detail) {
+  const li = node(name);
+  li.classList.remove("active", "done", "skipped");
+  if (state) li.classList.add(state);
+  if (detail !== undefined) li.querySelector(".detail").textContent = detail;
+}
+
+function activate(name, detail) {
+  for (const li of $("pipeline").children) li.classList.remove("active");
+  setNode(name, "active", detail);
+}
+
+function resetPipeline(source) {
+  for (const li of $("pipeline").children) setNode(li.dataset.node, "", "");
+  if (source === "auto") activate("route");
+  else { setNode("route", "skipped"); activate("search", HINTS[source] ? source : ""); }
+}
+
+function advance(stage, text) {
+  if (stage === "routed") {                      // "asking sql": that source is searching
+    const source = text.replace("asking ", "");
+    activate("search", ROUTE_NAMES[source] || source);
+  } else if (stage === "corrective") {
+    if (text.startsWith("retrieve")) { setNode("search", "done"); activate("grade"); }
+    else if (text.startsWith("grade")) { setNode("grade", "done", text.replace("grade ", "")); activate("answer"); }
+    else if (text.startsWith("rewrite")) { setNode("grade", "done"); activate("search", "rewritten query"); }
+    else { setNode("answer", "done", text === "generate" ? "" : text); if (selfRag) activate("check"); }
+  } else if (stage === "self-rag") {
+    if (text === "revise") { setNode("check", "done", "revising"); activate("answer", "revised"); }
+    else { setNode("answer", "done"); setNode("check", "done", text); }
+  }
+}
+
+function finishPipeline(r) {
+  for (const li of $("pipeline").children) {
+    const name = li.dataset.node;
+    if (li.classList.contains("active")) setNode(name, "done");
+    else if (!li.classList.contains("done") && !li.classList.contains("skipped")) {
+      // search and answer always ran; grade and check only with corrective RAG and Self-RAG
+      setNode(name, ["search", "answer"].includes(name) ? "done" : "skipped");
+    }
+  }
+  if (r.route) node("route").querySelector(".detail").textContent = ROUTE_NAMES[r.route.source] || r.route.source;
+  if (r.supported === true) node("check").querySelector(".detail").textContent = "supported";
+}
+
+// --- the steps list, the timer and the "waking up" note ------------------------------------
+
+let started = 0, ticker = null, wakeTimer = null;
+
 function addStep(stage, text) {
-  $("steps").append(el("li", {}, el("span", { class: "stage" }, stage), text));
+  for (const li of $("steps").children) li.classList.remove("current");
+  $("steps").append(el("li", { class: "current" }, el("span", { class: `stage ${stage}` }, stage), text));
+  $("waking").classList.add("hidden");
+  clearTimeout(wakeTimer);
+  wakeTimer = setTimeout(() => $("waking").classList.remove("hidden"), 8000);
+}
+
+function startProgress(source) {
+  $("steps").replaceChildren();
+  resetPipeline(source);
+  $("skeleton").classList.remove("hidden");
+  $("waking").classList.add("hidden");
+  $("progress").classList.remove("hidden");
+  started = performance.now();
+  clearInterval(ticker);
+  ticker = setInterval(() => {
+    $("timer").textContent = `${((performance.now() - started) / 1000).toFixed(1)} s`;
+  }, 100);
+  addStep("server", "question sent");
+}
+
+function stopProgress() {
+  clearInterval(ticker);
+  clearTimeout(wakeTimer);
+  $("waking").classList.add("hidden");
+  $("skeleton").classList.add("hidden");
+  for (const li of $("steps").children) li.classList.remove("current");
 }
 
 function showError(message) {
@@ -157,8 +410,10 @@ function showError(message) {
   $("error").classList.remove("hidden");
 }
 
-// "[1][3]" in the answer become links to the chunk they cite.
-function answerWithLinks(text, chunkIds) {
+// --- the answer ----------------------------------------------------------------------------
+
+// "[1][3]" in the answer become links to the chunk they cite; hovering lights up the source.
+function answerWithLinks(text) {
   const out = document.createDocumentFragment();
   let last = 0;
   for (const match of text.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
@@ -166,6 +421,8 @@ function answerWithLinks(text, chunkIds) {
     for (const n of match[1].split(",").map((s) => parseInt(s, 10))) {
       const link = el("a", { class: "cite", href: `#chunk-${n}` }, `[${n}]`);
       link.addEventListener("click", () => openChunk(n));
+      link.addEventListener("mouseenter", () => $(`source-${n}`)?.classList.add("lit"));
+      link.addEventListener("mouseleave", () => $(`source-${n}`)?.classList.remove("lit"));
       out.append(link);
     }
     last = match.index + match[0].length;
@@ -187,24 +444,31 @@ function badge(text, kind = "") {
 }
 
 function showAnswer(r) {
-  const badges = $("badges");
-  badges.replaceChildren(
+  stopProgress();
+  finishPipeline(r);
+  addStep("server", `answered in ${((performance.now() - started) / 1000).toFixed(1)} s`);
+  $("steps").lastChild.classList.remove("current");
+
+  $("badges").replaceChildren(
     r.found ? badge("answered", "ok") : badge("not found", "warn"),
-    ...(r.route ? [badge(`route: ${r.route.source}`)] : [badge(`source: ${r.source}`)]),
+    ...(r.route ? [badge(`route: ${ROUTE_NAMES[r.route.source] || r.route.source}`)] : [badge(`source: ${r.source}`)]),
     ...(r.supported === true ? [badge("supported by its sources", "ok")] : []),
     ...(r.supported === false ? [badge("some claims unsupported", "bad")] : []),
     badge(`${r.input_tokens + r.output_tokens} tokens`),
     badge(`${r.latency_s.toFixed(1)} s in LLM calls`),
   );
-  $("answer").replaceChildren(answerWithLinks(r.answer, r.chunks.map((c) => c.id)));
+  $("answer").replaceChildren(answerWithLinks(r.answer));
   $("query").textContent = r.query || "";
   $("query").classList.toggle("hidden", !r.query);
 
-  $("sources").replaceChildren(...r.citations.map((c) => {
+  // the source cards arrive one after another
+  $("sources").replaceChildren(...r.citations.map((c, i) => {
     const where = c.url
       ? el("a", { href: c.url, target: "_blank", rel: "noopener noreferrer" }, c.url)
       : sourceLabel(c);
-    return el("div", { class: "source" }, el("b", {}, `[${c.number}]`), where);
+    const card = el("div", { class: "source", id: `source-${c.number}` }, el("b", {}, `[${c.number}]`), where);
+    card.style.animationDelay = `${0.15 + i * 0.08}s`;
+    return card;
   }));
   $("sources-panel").classList.toggle("hidden", !r.citations.length);
 
@@ -212,19 +476,32 @@ function showAnswer(r) {
   $("chunks").replaceChildren(...r.chunks.map((c, i) => {
     const n = i + 1;
     const summary = el("summary", {},
-      `[${n}] ${sourceLabel({ ...c, pages: c.pages })}` +
-      (c.section ? ` · ${c.section}` : "") + ` · score ${c.score.toFixed(2)}` +
-      (cited.has(n) ? " · cited" : ""));
+      `[${n}] ${sourceLabel(c)}` + (c.section ? ` · ${c.section}` : "") +
+      ` · score ${c.score.toFixed(2)}` + (cited.has(n) ? " · cited" : ""));
     return el("details", { class: `chunk${cited.has(n) ? " cited" : ""}`, id: `chunk-${n}` },
       summary, el("pre", {}, c.text));
   }));
   if (!r.chunks.length) $("chunks").replaceChildren(el("p", { class: "muted" }, "No sources."));
+
+  // restart the reveal animation for each new answer
+  for (const panel of $("result").querySelectorAll(".reveal")) {
+    panel.style.animation = "none"; void panel.offsetWidth; panel.style.animation = "";
+  }
   $("result").classList.remove("hidden");
 }
 
 function handle(kind, data) {
-  if (kind === "route") addStep("router", `→ ${data.source}: ${data.reason}`);
-  else if (kind === "step") addStep(data.stage, data.text);
+  if (kind === "route") {
+    addStep("router", `→ ${ROUTE_NAMES[data.source] || data.source}: ${data.reason}`);
+    setNode("route", "done", ROUTE_NAMES[data.source] || data.source);
+    activate("search");
+  } else if (kind === "step") {
+    // "asking vector" -> "searching text": the source names visitors see elsewhere
+    const text = data.stage === "routed"
+      ? data.text.replace(/^asking (\w+)/, (_, s) => `searching ${ROUTE_NAMES[s] || s}`) : data.text;
+    addStep(data.stage, text);
+    advance(data.stage, data.text);
+  }
   else if (kind === "answer") showAnswer(data);
   else if (kind === "error") showError(data.detail);
 }
@@ -263,30 +540,55 @@ $("ask").addEventListener("submit", async (event) => {
   event.preventDefault();
   const question = $("question").value.trim();
   if (!question) return;
+  const source = $("source").value;
   $("error").classList.add("hidden");
   $("result").classList.add("hidden");
-  $("steps").replaceChildren();
-  $("progress").classList.remove("hidden");
+  startProgress(source);
   $("go").disabled = true;
   $("go").textContent = "Answering…";
   try {
     sessionStorage.setItem("reportlens-password", $("password").value);
   } catch {}  // storage can be blocked; the password then has to be typed again
   try {
-    await ask(question, $("source").value);
+    await ask(question, source);
   } catch (err) {
     showError(err.message);
   } finally {
+    stopProgress();
     $("go").disabled = false;
     $("go").textContent = "Ask";
   }
 });
 
+// --- page setup ----------------------------------------------------------------------------
+
+// "What is this?" starts open on a first visit, then stays as the visitor left it.
+try { $("about").open = localStorage.getItem("reportlens-about") !== "closed"; } catch { $("about").open = true; }
+$("about").addEventListener("toggle", () => {
+  try { localStorage.setItem("reportlens-about", $("about").open ? "open" : "closed"); } catch {}
+});
+
+$("source").addEventListener("change", () => { $("hint").textContent = HINTS[$("source").value]; });
+$("hint").textContent = HINTS.auto;
+
 // A public demo has a password (GET /health says so); remember it for this tab only.
 fetch("/health").then((r) => r.json()).then((health) => {
+  selfRag = health.self_rag;
+  const flag = document.querySelector('[data-flag="self_rag"] .state');
+  flag.textContent = health.self_rag ? "(on in this demo)" : "(off in this demo, to save quota)";
   if (!health.password_required) return;
   $("password-row").classList.remove("hidden");
   try { $("password").value = sessionStorage.getItem("reportlens-password") || ""; } catch {}
+}).catch(() => {});
+
+// The corpus loaded, as chips under the title.
+fetch("/meta").then((r) => r.json()).then((meta) => {
+  const names = { rbc: "RBC", scotiabank: "Scotiabank", bce: "BCE" };
+  const years = meta.years.length ? `fiscal ${meta.years[0]}–${meta.years[meta.years.length - 1]}` : "";
+  $("corpus").replaceChildren(
+    ...meta.companies.map((c) => el("span", { class: "chip" }, names[c] || c)),
+    ...(years ? [el("span", { class: "chip" }, years)] : []),
+  );
 }).catch(() => {});
 
 for (const q of EXAMPLES) {

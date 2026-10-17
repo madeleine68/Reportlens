@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from reportlens.agents.events import listening
 from reportlens.api import service
+from reportlens.api.access import password_required, require_access
 from reportlens.api.schemas import AskRequest, AskResponse, Health, Meta, Source
 from reportlens.core import llm
 from reportlens.core.config import get_settings
@@ -99,7 +100,11 @@ def health(resources: ResourcesDep) -> Health:
     postgres, neo4j = service.health(resources)
     settings = get_settings()
     return Health(
-        postgres=postgres, neo4j=neo4j, web_search=web_enabled(), self_rag=settings.self_rag
+        postgres=postgres,
+        neo4j=neo4j,
+        web_search=web_enabled(),
+        self_rag=settings.self_rag,
+        password_required=password_required(),
     )
 
 
@@ -109,7 +114,7 @@ def meta(resources: ResourcesDep) -> Meta:
     return Meta(companies=companies, years=years, sources=SOURCES)
 
 
-@app.post("/ask")
+@app.post("/ask", dependencies=[Depends(require_access)])
 def ask(
     body: AskRequest,
     resources: ResourcesDep,
@@ -152,7 +157,7 @@ def stream_events(
         yield sse(*event)
 
 
-@app.post("/ask/stream")
+@app.post("/ask/stream", dependencies=[Depends(require_access)])
 def ask_stream(
     body: AskRequest,
     resources: ResourcesDep,
@@ -161,5 +166,6 @@ def ask_stream(
     return StreamingResponse(
         stream_events(body.question, body.source, resources, answer_fn),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache"},
+        # no-buffering: proxies (e.g. Hugging Face's) must pass each event on at once
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

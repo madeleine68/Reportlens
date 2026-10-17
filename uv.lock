@@ -1688,9 +1688,8 @@ wheels = [
 name = "reportlens"
 version = "0.1.0"
 source = { editable = "." }
+default-groups = ["dev", "ingest"]
 dependencies = [
-    { name = "docling" },
-    { name = "docling-parse" },
     { name = "fastapi" },
     { name = "langgraph" },
     { name = "neo4j" },
@@ -1704,7 +1703,6 @@ dependencies = [
     { name = "sentence-transformers" },
     { name = "sqlglot" },
     { name = "torch" },
-    { name = "torchvision" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1714,11 +1712,14 @@ dev = [
     { name = "reportlab" },
     { name = "ruff" },
 ]
+ingest = [
+    { name = "docling" },
+    { name = "docling-parse" },
+    { name = "torchvision" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "docling", specifier = ">=2.73.1" },
-    { name = "docling-parse", specifier = ">=4.7,<5" },
     { name = "fastapi", specifier = ">=0.143.3" },
     { name = "langgraph", specifier = ">=1.2.16" },
     { name = "neo4j", specifier = ">=5.20" },
@@ -1732,7 +1733,6 @@ requires-dist = [
     { name = "sentence-transformers", specifier = ">=5.7.0" },
     { name = "sqlglot", specifier = ">=25" },
     { name = "torch", specifier = "==2.2.2" },
-    { name = "torchvision", specifier = "==0.17.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.54.0" },
 ]
 
@@ -1741,6 +1741,11 @@ dev = [
     { name = "pytest", specifier = ">=8.3" },
     { name = "reportlab", specifier = ">=5.0.1" },
     { name = "ruff", specifier = ">=0.6" },
+]
+ingest = [
+    { name = "docling", specifier = ">=2.73.1" },
+    { name = "docling-parse", specifier = ">=4.7,<5" },
+    { name = "torchvision", specifier = "==0.17.2" },
 ]
 
 [[package]]

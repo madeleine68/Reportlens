@@ -35,6 +35,8 @@
   textarea { flex: 1 1 100%; min-height: 64px; resize: vertical; padding: 10px; font: inherit;
              color: var(--text); background: var(--panel); border: 1px solid var(--line);
              border-radius: 8px; }
+  input[type=password] { font: inherit; padding: 8px 10px; border-radius: 8px; color: var(--text);
+                         border: 1px solid var(--line); background: var(--panel); }
   select, button { font: inherit; padding: 8px 12px; border-radius: 8px;
                    border: 1px solid var(--line); background: var(--panel); color: var(--text); }
   button[type=submit] { background: var(--accent); border-color: var(--accent); color: #fff;
@@ -85,6 +87,10 @@
       <option value="sql">SQL (financial tables)</option>
       <option value="graph">graph (Neo4j)</option>
     </select>
+    <span id="password-row" class="hidden">
+      <label class="muted" for="password">Demo password</label>
+      <input id="password" type="password" autocomplete="current-password" size="14">
+    </span>
     <button type="submit" id="go">Ask</button>
     <div class="examples" id="examples"></div>
   </form>
@@ -227,12 +233,13 @@ function handle(kind, data) {
 async function ask(question, source) {
   const response = await fetch("/ask/stream", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-demo-password": $("password").value },
     body: JSON.stringify({ question, source }),
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     const detail = Array.isArray(body.detail) ? body.detail[0].msg : body.detail;
+    if (response.status === 401) $("password").focus();
     throw new Error(detail || `HTTP ${response.status}`);
   }
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -263,6 +270,9 @@ $("ask").addEventListener("submit", async (event) => {
   $("go").disabled = true;
   $("go").textContent = "Answering…";
   try {
+    sessionStorage.setItem("reportlens-password", $("password").value);
+  } catch {}  // storage can be blocked; the password then has to be typed again
+  try {
     await ask(question, $("source").value);
   } catch (err) {
     showError(err.message);
@@ -271,6 +281,13 @@ $("ask").addEventListener("submit", async (event) => {
     $("go").textContent = "Ask";
   }
 });
+
+// A public demo has a password (GET /health says so); remember it for this tab only.
+fetch("/health").then((r) => r.json()).then((health) => {
+  if (!health.password_required) return;
+  $("password-row").classList.remove("hidden");
+  try { $("password").value = sessionStorage.getItem("reportlens-password") || ""; } catch {}
+}).catch(() => {});
 
 for (const q of EXAMPLES) {
   const button = el("button", { type: "button" }, q);

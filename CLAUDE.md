@@ -55,6 +55,7 @@ reportlens/
 ├── DECISIONS.md          # decision log, updated as we go
 ├── README.md
 ├── docker-compose.yml    # postgres+pgvector, neo4j (Phase 3)
+├── deploy/               # Dockerfile, space_README.md, env.deploy.example (Phase 5, Hugging Face Space)
 ├── .env.example
 ├── pyproject.toml
 ├── src/reportlens/
@@ -65,7 +66,7 @@ reportlens/
 │   ├── agents/           # router.py, routed.py (router + fallback), corrective.py, self_rag.py (LangGraph), events.py (progress for the API)
 │   ├── generation/       # answer.py (answers with page citations), prompts.py
 │   ├── evals/            # questions.py, metrics.py, judge.py, runner.py, routing.py (eval logic)
-│   └── api/              # main.py (FastAPI routes), service.py (answering, resources), schemas.py, static/index.html (UI)
+│   └── api/              # main.py (FastAPI routes), service.py (answering, resources), schemas.py, access.py (demo password, rate limits), static/index.html (UI)
 ├── evals/
 │   ├── questions.jsonl   # OWNED BY THE HUMAN, see rules below
 │   ├── questions.smoke.jsonl  # smoke test for the runner only; never recorded in results.md
@@ -105,6 +106,10 @@ uv run python evals/run_evals.py --name "corrective" --source corrective --resum
 SELF_RAG=true uv run python scripts/ask.py --routed "Why did BCE's headcount change in 2024?"   # Phase 4: routed answer + Self-RAG check
 nohup caffeinate -i scripts/eval_loop.sh >> data/cache/evals_run.log 2>&1 &   # Phase 4 evals back to back, resuming after each daily limit
 uv run uvicorn reportlens.api.main:app --reload      # Phase 5: start the API + UI (UI at http://localhost:8000, docs at /docs; loads models at startup)
+uv run python scripts/deploy_data.py                 # Phase 5: copy local Postgres → Neon and the graph → AuraDB (targets in .env.deploy)
+uv run python scripts/deploy_space.py --dry-run      # Phase 5: list what would be uploaded to the Space
+uv run python scripts/deploy_space.py --secrets      # Phase 5: set the Space's secrets/variables from .env.deploy
+uv run python scripts/deploy_space.py                # Phase 5: upload the code; the Space rebuilds
 uv run pytest                                        # fast tests
 uv run pytest -m slow                                # tests that run real models
 uv run ruff check . && uv run ruff format .          # lint and format
@@ -163,7 +168,7 @@ Keep this section up to date when commands change.
 
 - [x] FastAPI endpoints with streaming; response includes route taken, sources and pages (`api/`: `/health`, `/meta`, `/ask`, `/ask/stream` (server-sent progress events: route, steps, answer, done/error; not token streaming); tested with stubs and started live (health and meta); no auth yet; see DECISIONS.md 2026-10-17)
 - [x] Simple UI showing answer, route, sources and retrieved chunks (`api/static/index.html` at `/`: plain HTML/CSS/JS, streams steps from `/ask/stream`; checked with a stub answerer in light and dark; screenshot for the README after the evals free up the quota; see DECISIONS.md 2026-10-17)
-- [ ] Deploy (API: Railway/Fly; DB: Neon/Supabase; graph: Neo4j AuraDB free)
+- [ ] Deploy (API: Hugging Face Docker Space, chosen over Railway/Fly by the owner on 2026-10-17 because the models need ~1–1.5 GB RAM; DB: Neon; graph: Neo4j AuraDB free) (code ready: `deploy/Dockerfile`, `scripts/deploy_data.py`, `scripts/deploy_space.py`, demo password + rate limits in `api/access.py`; accounts and first upload pending; see DECISIONS.md 2026-10-17)
 - [ ] README: architecture diagram, results table, design decisions, demo video link
 
 ## Rules for the coding agent
@@ -211,7 +216,7 @@ These are the parts I will write myself so I can explain them in interviews. You
 - Use the cheaper model (`LLM_MODEL_FAST`) for grading, routing and query rewriting; the stronger model (`LLM_MODEL_MAIN`) only for final answers
 - The SQL tool must use a read-only Postgres role. **Never execute LLM-generated SQL with write permissions.**
 - LLM-generated Cypher runs only in a read transaction, after `sources/cypher_safety.py` has checked it.
-- Never commit `.env`, PDFs or API keys
+- Never commit `.env`, `.env.deploy`, PDFs or API keys
 
 ## Eval set format
 

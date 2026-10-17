@@ -493,3 +493,19 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 **Decision:** the static page (`api/static/index.html`, ~300 lines with CSS). It reads `/ask/stream` with `fetch()` and a small server-sent-events parser (`EventSource` only does GET), shows each step as it arrives, then the answer with `[n]` linked to its chunk, badges (answered, route, Self-RAG verdict, tokens, time), cited sources (pages or URL), the SQL/Cypher query, and every chunk the answer model saw with its score. All answer and chunk text is inserted with `textContent`/DOM nodes, never `innerHTML` (a test checks this), since web results are untrusted.
 
 **Evidence:** checked in headless Chrome against the real app with a stub answerer (no quota): streamed steps, answer, citations and chunks render in light and dark mode, and the page is no wider than the viewport at 500 px (headless Chrome's minimum). A README screenshot with a real answer waits until the eval runs free up the quota.
+
+## 2026-10-17 — Deployment: Hugging Face Space + Neon + AuraDB, with a demo password and rate limits
+
+**Context:** Phase 5 planned Railway or Fly for the API. The API loads PyTorch, the embedding model and the cross-encoder, about 1–1.5 GB of RAM; Railway and Fly don't run that free (both ~$5/month at that size). The data is small: Postgres 120 MB (6,066 chunks plus the table cells the SQL tool reads), the graph 148 nodes and 410 relationships. LLM calls use the owner's Groq free tier, the same quota as the evals.
+
+**Options considered:**
+- **API host:** Railway (paid after the trial), Fly (needs a card; a few dollars a month), **Hugging Face Docker Space** (free CPU, 16 GB RAM; sleeps after 48 h idle, ~1–2 min to wake).
+- **Access:** open with rate limits; private (owner only); **a shared demo password plus rate limits**.
+
+**Decision (owner's choices):** Hugging Face Space, Neon, AuraDB Free; demo password plus limits.
+- `api/access.py`: `DEMO_PASSWORD` (header `X-Demo-Password`, constant-time compare, checked before any limit so wrong guesses cost nothing), `RATE_LIMIT_PER_HOUR` per visitor (rolling hour, by first X-Forwarded-For IP) and `DAILY_QUESTION_CAP` for everyone. In memory, so they reset on restart; the daily cap bounds the cost even if the IP header is faked. All off by default, so local use is unchanged.
+- Hosted URLs: `DATABASE_URL` and `NEO4J_URI` replace the host/port settings; the reader URL is derived from `DATABASE_URL`.
+- Image: `deploy/Dockerfile`, python 3.12-slim, runtime dependencies only (Docling moved to an `ingest` dependency group, installed locally by default), CPU-only torch (CUDA packages dropped from the export), both models baked in, user 1000, port 7860.
+- `scripts/deploy_space.py` uploads only `src/`, the locked requirements, the Dockerfile and a Space README (Hugging Face reads the Space's settings from its header) via `huggingface_hub`; `--secrets` sets the Space's secrets from `.env.deploy`. `scripts/deploy_data.py` copies Postgres with `pg_dump | psql` inside the local Postgres container (matching client version; the target URL passed through the environment) and rebuilds the graph on AuraDB from the cache (no LLM calls).
+
+**Evidence:** 7 tests for the password, limits and URL overrides; the Space folder assembles to 59 files (code, requirements, Dockerfile, README; no data or secrets). The image builds locally (linux/amd64, 2.13 GB) and, run against the local databases, starts in about a minute, reports Postgres and Neo4j reachable and `password_required: true`, serves the UI, refuses `/ask` without the password (401), and uses ~506 MB of RAM idle.

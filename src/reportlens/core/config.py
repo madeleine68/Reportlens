@@ -3,8 +3,9 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote, urlsplit, urlunsplit
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -23,6 +24,10 @@ class Settings(BaseSettings):
     postgres_db: str = "reportlens"
     postgres_host: str = "localhost"
     postgres_port: int = 5432
+    # Hosted databases (deployment): a full connection string replaces the parts above, e.g.
+    # Neon's postgresql://user:pass@host/db?sslmode=require. The SQL tool's read-only URL is the
+    # same with the reader's name and password swapped in.
+    postgres_url: SecretStr | None = Field(default=None, validation_alias="DATABASE_URL")
 
     # LLM (any OpenAI-compatible endpoint)
     llm_base_url: str
@@ -82,6 +87,8 @@ class Settings(BaseSettings):
     neo4j_password: SecretStr = SecretStr("reportlens")
     neo4j_host: str = "localhost"
     neo4j_bolt_port: int = 7687
+    # Hosted Neo4j (deployment), e.g. AuraDB's neo4j+s://xxxx.databases.neo4j.io
+    neo4j_url: str | None = Field(default=None, validation_alias="NEO4J_URI")
     # LLM-written Cypher runs in a read transaction with this timeout and row limit.
     cypher_timeout_s: float = 5.0
     cypher_row_limit: int = 50
@@ -92,6 +99,12 @@ class Settings(BaseSettings):
     tavily_api_key: SecretStr | None = None
     web_max_results: int = 5
     web_timeout_s: float = 15.0
+
+    # Phase 5 public demo: with DEMO_PASSWORD set, /ask needs it (header X-Demo-Password).
+    # Limits protect the free-tier LLM quota; 0 = no limit (local use).
+    demo_password: SecretStr | None = None
+    rate_limit_per_hour: int = 0  # questions per visitor per rolling hour
+    daily_question_cap: int = 0  # questions per day for everyone together
 
     # Phase 4 corrective RAG: the fast model grades retrieved chunks; if they are not enough,
     # it rewrites the query (at most this many times), then falls back to the web or refuses.
@@ -147,8 +160,8 @@ class Settings(BaseSettings):
 
     @property
     def neo4j_uri(self) -> str:
-        """Bolt address of the Neo4j server."""
-        return f"bolt://{self.neo4j_host}:{self.neo4j_bolt_port}"
+        """Address of the Neo4j server: NEO4J_URI if set, else the local Bolt port."""
+        return self.neo4j_url or f"bolt://{self.neo4j_host}:{self.neo4j_bolt_port}"
 
     @property
     def parsed_dir(self) -> Path:
@@ -157,7 +170,9 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """Postgres connection string for psycopg."""
+        """Postgres connection string for psycopg: DATABASE_URL if set, else built from parts."""
+        if self.postgres_url is not None:
+            return self.postgres_url.get_secret_value()
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password.get_secret_value()}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
@@ -165,11 +180,14 @@ class Settings(BaseSettings):
 
     @property
     def reader_database_url(self) -> str:
-        """Connection string for the read-only role the SQL tool uses."""
-        return (
-            f"postgresql://{self.sql_reader_user}:{self.sql_reader_password.get_secret_value()}"
-            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        )
+        """Connection string for the read-only role the SQL tool uses: the main one, with the
+        reader's name and password in place of the owner's."""
+        url = urlsplit(self.database_url)
+        user = quote(self.sql_reader_user, safe="")
+        password = quote(self.sql_reader_password.get_secret_value(), safe="")
+        host = url.hostname or ""
+        netloc = f"{user}:{password}@{host}" + (f":{url.port}" if url.port else "")
+        return urlunsplit(url._replace(netloc=netloc))
 
 
 @lru_cache

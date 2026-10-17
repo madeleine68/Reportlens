@@ -105,6 +105,7 @@ class Health(BaseModel):
     neo4j: bool
     web_search: bool
     self_rag: bool
+    password_required: bool  # the UI asks for the demo password when true
 
 
 class Meta(BaseModel):

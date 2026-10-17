@@ -9,10 +9,7 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.4",
     "psycopg[binary]>=3.2",
-    "docling>=2.73.1",
-    "docling-parse>=4.7,<5",
     "torch==2.2.2",
-    "torchvision==0.17.2",
     "numpy<2",
     "sentence-transformers>=5.7.0",
     "pgvector>=0.5.1",
@@ -30,6 +27,15 @@ dev = [
     "reportlab>=5.0.1",
     "ruff>=0.6",
 ]
+# Parsing PDFs (ingest/). Not needed to answer questions, so the deployed image leaves it out.
+ingest = [
+    "docling>=2.73.1",
+    "docling-parse>=4.7,<5",
+    "torchvision==0.17.2",
+]
+
+[tool.uv]
+default-groups = ["dev", "ingest"]
 
 [build-system]
 requires = ["hatchling"]

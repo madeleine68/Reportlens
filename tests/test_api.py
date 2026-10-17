@@ -160,7 +160,7 @@ def test_health_and_meta_use_the_service(
     monkeypatch.setattr(service, "meta", lambda resources: (["bce", "rbc"], [2023, 2024]))
     health = client.get("/health").json()
     assert (health["postgres"], health["neo4j"]) == (True, False)
-    assert set(health) == {"postgres", "neo4j", "web_search", "self_rag"}
+    assert set(health) == {"postgres", "neo4j", "web_search", "self_rag", "password_required"}
     meta = client.get("/meta").json()
     assert meta["companies"] == ["bce", "rbc"] and "auto" in meta["sources"]
 

@@ -1,5 +1,6 @@
 # Secrets
 .env
+.env.deploy
 
 # Data (PDFs and parsed output are never committed)
 data/raw/

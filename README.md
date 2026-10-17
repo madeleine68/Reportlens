@@ -402,4 +402,17 @@ flowchart LR
   - It reads the stream with `fetch()`, because `EventSource` only makes GET requests and `/ask/stream` is a POST.
   - Answers and chunks (web pages above all) are inserted as text, never as HTML.
   - Light and dark mode follow the system; the layout fits a phone.
-- **Deploy:** hosted on free tiers.
+- **Deploy** (code ready; accounts and first upload pending): the API + UI as a **Hugging Face Docker Space** (free CPU with 16 GB RAM, which the embedding and reranking models need; it sleeps after 48 hours without visitors), Postgres on **Neon** and the graph on **Neo4j AuraDB Free**, all free tiers.
+
+  ```mermaid
+  flowchart LR
+      local[("Local Postgres<br/>+ Neo4j")] -->|"scripts/deploy_data.py<br/>pg_dump → psql; load_graph.py<br/>(no re-parsing, no LLM calls)"| hosted[("Neon Postgres<br/>AuraDB Neo4j")]
+      code["src/ + locked runtime deps<br/>(no PDF parsing, CPU-only torch)"] -->|"scripts/deploy_space.py"| space["Hugging Face Space<br/>Docker: models baked in,<br/>uvicorn on port 7860"]
+      space --> hosted
+      space --> groq["Groq API"]
+      visitor["Visitor"] -->|"demo password,<br/>10 questions/hour,<br/>100/day for everyone"| space
+  ```
+
+  - **Protecting the free-tier quota:** with `DEMO_PASSWORD` set, `/ask` needs it (the UI asks for it once per tab); each visitor gets `RATE_LIMIT_PER_HOUR` questions per rolling hour and everyone together `DAILY_QUESTION_CAP` per day (`api/access.py`). A wrong password is rejected before it counts. Counts are in memory, which suits one Space instance; the daily cap is the hard limit, since a visitor's IP comes from a header that can be faked.
+  - **A smaller image:** PDF parsing (Docling) is a separate `ingest` dependency group that local `uv sync` installs and the image leaves out, and the image uses the CPU-only build of PyTorch (no CUDA packages). Both models are downloaded when the image is built, so a cold start doesn't fetch them.
+  - **Settings:** hosted databases are given as full URLs (`DATABASE_URL`, `NEO4J_URI`); the SQL tool's read-only URL is derived from `DATABASE_URL` with the reader's name and password. Deploy values live in `.env.deploy` (git-ignored; template in `deploy/env.deploy.example`) and reach the Space as encrypted secrets.

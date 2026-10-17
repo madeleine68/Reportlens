@@ -39,7 +39,7 @@ uv run python scripts/ask.py --sql "Which bank had the higher CET1 ratio in 2024
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
 | 3. Structured data | Real tables, SQL tool, knowledge graph, chart summaries | 🟡 Nearly done: SQL tool (0.80 vs 0.67 on numeric questions) and graph tool built and measured; chart summaries being generated (~70 a day on the free tier) |
 | 4. Agentic layer | Router, Self-RAG, Corrective RAG | 🟡 In progress: router (route accuracy 0.83) and web search built; corrective RAG built with LangGraph, not yet measured |
-| 5. Ship | API, UI, deployment | 🟡 In progress: API (`/ask`, `/ask/stream` with progress events) and web UI built; data on Neon and AuraDB; Cloud Run deploy pending |
+| 5. Ship | API, UI, deployment | 🟡 In progress: API (`/ask`, `/ask/stream` with progress events) and web UI built; deployed on Cloud Run |
 
 **Corpus so far:** 12 of 20 reports ingested (also parsed with tables) (BCE, RBC and Scotiabank, fiscal 2021–2024). TD and Shopify are downloaded but not yet ingested.
 
@@ -402,7 +402,7 @@ flowchart LR
   - It reads the stream with `fetch()`, because `EventSource` only makes GET requests and `/ask/stream` is a POST.
   - Answers and chunks (web pages above all) are inserted as text, never as HTML.
   - Light and dark mode follow the system; the layout fits a phone.
-- **Deploy** (data copied to Neon and AuraDB; Cloud Run deploy pending): the API + UI on **Google Cloud Run** (2 GB, scales to zero when idle, so the first question after a quiet spell waits ~30–60 s while the models load; within Cloud Run's monthly free allowance at demo traffic), Postgres on **Neon** and the graph on **Neo4j AuraDB Free**. The first plan, a Hugging Face Docker Space, now needs a PRO subscription; `scripts/deploy_space.py` still works for anyone with one.
+- **Deploy** (live at https://reportlens-400767792007.us-east1.run.app; ask the owner for the demo password): the API + UI on **Google Cloud Run** (2 GB, scales to zero when idle, so the first question after a quiet spell waits ~30–60 s while the models load; within Cloud Run's monthly free allowance at demo traffic), Postgres on **Neon** and the graph on **Neo4j AuraDB Free**. The first plan, a Hugging Face Docker Space, now needs a PRO subscription; `scripts/deploy_space.py` still works for anyone with one.
 
   ```mermaid
   flowchart LR

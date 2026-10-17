@@ -562,8 +562,8 @@ $("ask").addEventListener("submit", async (event) => {
 
 // --- page setup ----------------------------------------------------------------------------
 
-// "What is this?" starts open on a first visit, then stays as the visitor left it.
-try { $("about").open = localStorage.getItem("reportlens-about") !== "closed"; } catch { $("about").open = true; }
+// "What is this?" starts closed, then stays as the visitor left it.
+try { $("about").open = localStorage.getItem("reportlens-about") === "open"; } catch {}
 $("about").addEventListener("toggle", () => {
   try { localStorage.setItem("reportlens-about", $("about").open ? "open" : "closed"); } catch {}
 });

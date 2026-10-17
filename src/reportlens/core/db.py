@@ -46,7 +46,8 @@ def ensure_reader_role(conn: psycopg.Connection) -> None:
         )
     )
     conn.execute(
-        sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(s.postgres_db), role)
+        # The connected database, not POSTGRES_DB: a hosted DATABASE_URL names its own (neondb).
+        sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(sql.Identifier(conn.info.dbname), role)
     )
     conn.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(role))
     tables = sql.SQL(", ").join(sql.Identifier(t) for t in READER_TABLES)

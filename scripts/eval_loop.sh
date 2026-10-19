@@ -34,6 +34,8 @@ run() {  # name, then run_evals.py arguments
   done
 }
 
-run "routed corrective" --source routed
-run "corrective" --source corrective
+# Done 2026-10-19: "routed corrective" --source routed, "corrective" --source corrective.
+# Settings placed before `run` apply only to that run.
+ROUTED_CORRECTIVE=false run "routed" --source routed --notes "router without corrective RAG"
+SELF_RAG=true run "routed corrective self-rag" --source routed --notes "SELF_RAG=true"
 echo "=== $(date) all evals done"

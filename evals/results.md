@@ -32,3 +32,5 @@ Append-only. One row per experiment.
 | 2026-10-16 | graph tool | 1.00 | 0.29 | 0.50 | 0.50 | 7.5s | $0.0000 (852 tok) | n=2; source=graph; types=relationship |
 | 2026-10-16 | graph tool (n=9 relationship) | 0.44 | 0.48 | 0.56 | 0.60 | 10.1s | $0.0000 (512 tok) | n=9; source=graph; types=relationship |
 | 2026-10-16 | text search best stack (n=9 relationship) | 0.89 | 0.93 | 0.83 | 1.00 | 7.6s | $0.0000 (2,849 tok) | n=9; types=relationship; naive chunks + filters + hybrid + rerank; same questions as the graph row |
+| 2026-10-18 | routed corrective | 0.69 | 0.67 | 0.89 | 0.94 | 11.0s | $0.0000 (714 tok) | n=53; source=routed |
+| 2026-10-19 | corrective | 0.68 | 0.66 | 0.74 | 0.92 | 7.2s | $0.0000 (1,102 tok) | n=53; source=corrective |

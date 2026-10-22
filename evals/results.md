@@ -35,3 +35,4 @@ Append-only. One row per experiment.
 | 2026-10-18 | routed corrective | 0.69 | 0.67 | 0.89 | 0.94 | 11.0s | $0.0000 (714 tok) | n=53; source=routed |
 | 2026-10-19 | corrective | 0.68 | 0.66 | 0.74 | 0.92 | 7.2s | $0.0000 (1,102 tok) | n=53; source=corrective |
 | 2026-10-21 | routed | 0.66 | 0.64 | 0.88 | 0.93 | 8.3s | $0.0000 (1,368 tok) | n=53; source=routed; router without corrective RAG |
+| 2026-10-22 | routed corrective self-rag | 0.72 | 0.70 | 0.78 | 0.97 | 15.1s | $0.0000 (878 tok) | n=53; source=routed; SELF_RAG=true |

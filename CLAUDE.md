@@ -170,7 +170,7 @@ Keep this section up to date when commands change.
 - [x] FastAPI endpoints with streaming; response includes route taken, sources and pages (`api/`: `/health`, `/meta`, `/ask`, `/ask/stream` (server-sent progress events: route, steps, answer, done/error; not token streaming); tested with stubs and started live (health and meta); no auth yet; see DECISIONS.md 2026-10-17)
 - [x] Simple UI showing answer, route, sources and retrieved chunks (`api/static/index.html` at `/`: plain HTML/CSS/JS, streams steps from `/ask/stream`; checked with a stub answerer in light and dark; 2026-10-17: "What is this?" panel and an animated pipeline strip for the streamed steps; screenshot for the README after the evals free up the quota; see DECISIONS.md 2026-10-17)
 - [ ] Deploy (API: Google Cloud Run, chosen by the owner on 2026-10-17 after Hugging Face Docker Spaces turned out to need PRO; DB: Neon; graph: Neo4j AuraDB free) (data copied to Neon (6,075 chunks, reader role checked) and AuraDB (148 nodes, 410 relationships); code ready: `deploy/Dockerfile`, `scripts/deploy_data.py`, `scripts/deploy_cloudrun.py`, demo password + rate limits in `api/access.py` with the daily count in Postgres; live at https://reportlens-400767792007.us-east1.run.app since 2026-10-17 (health: Postgres and Neo4j reachable, password required; `/ask` without it → 401); first live question pending; see DECISIONS.md 2026-10-17)
-- [ ] README: architecture diagram, results table, design decisions, demo video link
+- [ ] README: architecture diagram, results table, design decisions, demo video link (2026-10-26: architecture diagram, headline results (n=53), Phase 3 chart and Phase 4 results, design-decisions table done; demo video not recorded yet)
 
 ## Rules for the coding agent
 

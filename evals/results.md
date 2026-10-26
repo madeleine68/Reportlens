@@ -36,3 +36,5 @@ Append-only. One row per experiment.
 | 2026-10-19 | corrective | 0.68 | 0.66 | 0.74 | 0.92 | 7.2s | $0.0000 (1,102 tok) | n=53; source=corrective |
 | 2026-10-21 | routed | 0.66 | 0.64 | 0.88 | 0.93 | 8.3s | $0.0000 (1,368 tok) | n=53; source=routed; router without corrective RAG |
 | 2026-10-22 | routed corrective self-rag | 0.72 | 0.70 | 0.78 | 0.97 | 15.1s | $0.0000 (878 tok) | n=53; source=routed; SELF_RAG=true |
+| 2026-10-25 | hybrid+filters+rerank, naive chunks (n=53) | 0.80 | 0.63 | n/a | n/a | 4.7s | $0.0000 (0 tok) | n=53; retrieval only; chunking=naive; RRF top-20+20 → cross-encoder top-5; company/year filters; no charts |
+| 2026-10-25 | hybrid+filters+rerank + charts (n=53) | 0.81 | 0.61 | n/a | n/a | 5.5s | $0.0000 (0 tok) | n=53; retrieval only; chunking=naive; RRF top-20+20 → cross-encoder top-5; company/year filters; RETRIEVAL_FIGURES=true (379 chart summaries) |

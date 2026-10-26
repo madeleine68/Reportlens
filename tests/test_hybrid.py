@@ -70,7 +70,7 @@ def test_hybrid_search_fuses_deep_candidates_from_both_retrievers(
     calls: list[tuple[str, int, QueryFilters | None]] = []
 
     def fake(name: str, ids: list[str]):
-        def search(conn, question, k, filters):
+        def search(conn, question, k, filters, kind=None):
             calls.append((name, k, filters))
             return [_c(i) for i in ids]
 

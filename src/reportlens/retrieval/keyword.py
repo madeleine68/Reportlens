@@ -11,7 +11,7 @@ import psycopg
 
 from reportlens.core.config import get_settings
 from reportlens.core.logging import get_logger
-from reportlens.retrieval.filters import QueryFilters, filter_conditions, where_sql
+from reportlens.retrieval.filters import ChunkKind, QueryFilters, filter_conditions, where_sql
 from reportlens.retrieval.models import RetrievedChunk
 
 log = get_logger(__name__)
@@ -25,8 +25,14 @@ _QUERY_CTE = """
 """
 
 
-def _run(conn: psycopg.Connection, question: str, k: int, filters: QueryFilters | None):
-    conditions, params = filter_conditions(filters)
+def _run(
+    conn: psycopg.Connection,
+    question: str,
+    k: int,
+    filters: QueryFilters | None,
+    kind: ChunkKind | None = None,
+):
+    conditions, params = filter_conditions(filters, kind)
     sql = f"""{_QUERY_CTE}
         SELECT chunk_id, company, year, section, pages, text, context,
                ts_rank_cd(tsv, query.q) AS score
@@ -43,20 +49,22 @@ def keyword_search(
     question: str,
     k: int | None = None,
     filters: QueryFilters | None = None,
+    kind: ChunkKind | None = None,
 ) -> list[RetrievedChunk]:
     """Return the k chunks whose text best matches the question's terms, best first.
 
-    Filters work as in vector search, including the unfiltered fallback when nothing matches.
+    Filters and `kind` work as in vector search, including the unfiltered fallback when
+    nothing matches.
     """
     k = k or get_settings().retrieval_top_k
     filters = None if filters is None or filters.is_empty() else filters
     start = time.perf_counter()
-    rows = _run(conn, question, k, filters)
+    rows = _run(conn, question, k, filters, kind)
     if filters and not rows:
         log.info(
             "retrieval.filter_fallback companies=%s years=%s", filters.companies, filters.years
         )
-        rows = _run(conn, question, k, None)
+        rows = _run(conn, question, k, None, kind)
 
     results = [
         RetrievedChunk(

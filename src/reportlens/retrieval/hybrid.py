@@ -9,7 +9,7 @@ well by both retrievers beats one ranked first by only one of them.
 import psycopg
 
 from reportlens.core.config import get_settings
-from reportlens.retrieval.filters import QueryFilters
+from reportlens.retrieval.filters import ChunkKind, QueryFilters
 from reportlens.retrieval.keyword import keyword_search
 from reportlens.retrieval.models import RetrievedChunk
 from reportlens.retrieval.vector import vector_search
@@ -41,11 +41,12 @@ def hybrid_search(
     question: str,
     k: int | None = None,
     filters: QueryFilters | None = None,
+    kind: ChunkKind | None = None,
 ) -> list[RetrievedChunk]:
     """Take the top candidates from vector and keyword search, fuse them, and keep the best k."""
     settings = get_settings()
     k = k or settings.retrieval_top_k
     depth = settings.hybrid_candidates  # look deeper than k so the fusion has more to choose from
-    vector = vector_search(conn, question, k=depth, filters=filters)
-    keyword = keyword_search(conn, question, k=depth, filters=filters)
+    vector = vector_search(conn, question, k=depth, filters=filters, kind=kind)
+    keyword = keyword_search(conn, question, k=depth, filters=filters, kind=kind)
     return rrf_merge([vector, keyword], k=settings.rrf_k, top_n=k)

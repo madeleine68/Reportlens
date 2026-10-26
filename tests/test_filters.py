@@ -153,7 +153,7 @@ def test_search_uses_filters_only_when_enabled(
         lambda q, known, cache: QueryFilters(companies=["rbc"]),
     )
 
-    def fake_vector_search(conn, question, k, filters):
+    def fake_vector_search(conn, question, k, filters, kind=None):
         seen["f"] = filters
         return []
 

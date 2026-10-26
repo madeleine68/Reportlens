@@ -8,6 +8,7 @@ import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 
 import psycopg
 from pydantic import BaseModel
@@ -19,6 +20,7 @@ from reportlens.core.logging import get_logger
 log = get_logger(__name__)
 
 Structured = Callable[..., BaseModel]
+ChunkKind = Literal["text", "figure"]  # chunks.kind: report text or a chart summary
 
 
 class QueryFilters(BaseModel):
@@ -124,12 +126,18 @@ def extract_filters_cached(
     return filters
 
 
-def filter_conditions(filters: QueryFilters | None) -> tuple[list[str], dict[str, list]]:
+def filter_conditions(
+    filters: QueryFilters | None, kind: ChunkKind | None = None
+) -> tuple[list[str], dict[str, list]]:
     """SQL conditions (to be AND-ed into a WHERE clause) and their parameters for the filters.
 
-    Chart summaries are left out unless RETRIEVAL_FIGURES is on, whatever the filters.
+    `kind` restricts the search to text or chart chunks. Without it, chart summaries are left
+    out unless RETRIEVAL_FIGURES is on, whatever the filters.
     """
-    conditions: list[str] = [] if get_settings().retrieval_figures else ["kind = 'text'"]
+    if kind:
+        conditions: list[str] = [f"kind = '{kind}'"]  # a Literal, never user input
+    else:
+        conditions = [] if get_settings().retrieval_figures else ["kind = 'text'"]
     params: dict[str, list] = {}
     if filters and filters.companies:
         conditions.append("company = ANY(%(companies)s)")

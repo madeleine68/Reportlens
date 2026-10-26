@@ -64,7 +64,7 @@ def test_search_fetches_more_candidates_only_when_reranking(
     get_settings.cache_clear()
     requested: list[int] = []
 
-    def fake_vector_search(conn, question, k, filters):
+    def fake_vector_search(conn, question, k, filters, kind=None):
         requested.append(k)
         return [_c(f"c{i}") for i in range(k)]
 

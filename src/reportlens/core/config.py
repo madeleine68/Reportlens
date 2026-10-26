@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     retrieval_rerank: bool = False
     # Phase 3: also search the chart summaries (chunks with kind = 'figure').
     retrieval_figures: bool = False
+    # Phase 3: instead, reserve this many of the top k for the best chart summaries, searched
+    # on their own so charts never push text out of the other slots (0 = off).
+    retrieval_figure_slots: int = 0
     rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     rerank_candidates: int = 40
 

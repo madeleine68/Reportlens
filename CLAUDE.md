@@ -25,7 +25,7 @@ Clean, explainable code matters as much as features. The owner must be able to e
 
 ## Corpus
 
-- 5 companies × 4 years = 20 annual report PDFs (e.g. RBC, TD, Scotiabank, Shopify, BCE; fiscal 2021–2024)
+- 3 companies × 4 years = 12 annual report PDFs: RBC, Scotiabank and BCE, fiscal 2021–2024 (TD and Shopify PDFs are downloaded in `data/raw/` but not ingested)
 - Raw PDFs go in `data/raw/{company}/{year}.pdf` and are git-ignored
 - Parsed output goes in `data/parsed/` (also git-ignored)
 
@@ -88,6 +88,7 @@ uv run python scripts/load_tables.py                 # Phase 3: table numbers ->
 uv run python scripts/check_financials.py            # financials vs the eval set's expected numbers
 uv run python scripts/load_graph.py --show           # Phase 3: build the Neo4j graph (fast LLM, cached) and print it
 uv run python scripts/describe_figures.py            # Phase 3: describe charts with the vision model (cached, resumable; ~70/day on the free tier)
+RETRIEVAL_USE_FILTERS=true RETRIEVAL_MODE=hybrid RETRIEVAL_RERANK=true RETRIEVAL_FIGURE_SLOTS=1 uv run python evals/run_evals.py --name "x" --retrieval-only   # Phase 3: best stack + one chart slot
 uv run python scripts/ask.py "What was RBC's net income in 2023?"   # ask one question
 uv run python scripts/ask.py --sql "What was RBC's net income in 2023?"   # Phase 3: answer via the SQL tool
 uv run python scripts/ask.py --graph "Who was Scotiabank's CFO in 2024?"  # Phase 3: answer via the graph tool
@@ -149,7 +150,7 @@ Keep this section up to date when commands change.
 
 ### Phase 3: Structured data
 
-- [ ] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts: `ingest/figures.py` built, all 384 candidates described by 2026-10-25 and 379 loaded as chart chunks (5 judged not charts); measured 2026-10-25 (retrieval only, n=53): recall@5 0.81 vs 0.80 without charts, MRR 0.61 vs 0.63, 2 of 4 chart-only questions found; stays off (`RETRIEVAL_FIGURES=false`); see DECISIONS.md 2026-10-13 and 2026-10-16)
+- [ ] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts: `ingest/figures.py` built, all 384 candidates described by 2026-10-25 and 379 loaded as chart chunks (5 judged not charts); measured 2026-10-25 (retrieval only, n=53): recall@5 0.81 vs 0.80 without charts, MRR 0.61 vs 0.63, 2 of 4 chart-only questions found; stays off (`RETRIEVAL_FIGURES=false`). One reserved chart slot instead (`RETRIEVAL_FIGURE_SLOTS=1`, charts searched separately in `retrieval/search.py`): recall@5 0.85, MRR 0.65, all 4 chart-only questions found, p50 8.4s vs 4.7s; off by default until measured on answers; see DECISIONS.md 2026-10-13 and 2026-10-16)
 - [x] `financials` table: `(company, year, metric, value, unit, source_page)` (plus report_year, scope, basis; 12 metrics from `table_cells` by rules + vote; 29/33 eval figures found; see DECISIONS.md 2026-10-14)
 - [x] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit (`sources/sql_tool.py` + `sql_safety.py` with sqlglot; correctness 0.80 (with the comparison rule) vs 0.67 for text on the 33 numeric/trend/comparison questions; see DECISIONS.md 2026-10-14 and 2026-10-15)
 - [x] Neo4j graph: Company, Segment, Subsidiary, Executive nodes and their relationships (segments from `financials`, subsidiaries and executives by fast-LLM extraction, every relationship with report year and page; 51 segment, 247 subsidiary and 112 executive relationships across BCE, RBC and Scotiabank; see DECISIONS.md 2026-10-16)

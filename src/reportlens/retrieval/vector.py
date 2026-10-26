@@ -9,7 +9,7 @@ import psycopg
 from reportlens.core.config import get_settings
 from reportlens.core.logging import get_logger
 from reportlens.ingest.embed import embed_query
-from reportlens.retrieval.filters import QueryFilters, filter_conditions, where_sql
+from reportlens.retrieval.filters import ChunkKind, QueryFilters, filter_conditions, where_sql
 from reportlens.retrieval.models import RetrievedChunk
 
 log = get_logger(__name__)
@@ -33,8 +33,14 @@ def search_sql(where: str = "") -> str:
     """
 
 
-def _run(conn: psycopg.Connection, vector: np.ndarray, k: int, filters: QueryFilters | None):
-    conditions, params = filter_conditions(filters)
+def _run(
+    conn: psycopg.Connection,
+    vector: np.ndarray,
+    k: int,
+    filters: QueryFilters | None,
+    kind: ChunkKind | None = None,
+):
+    conditions, params = filter_conditions(filters, kind)
     with conn.transaction():
         # The HNSW index finds nearest neighbours first and filters after, so a strict WHERE
         # could leave fewer than k rows. Iterative scan keeps searching until k rows pass.
@@ -49,22 +55,24 @@ def vector_search(
     k: int | None = None,
     embed: QueryEmbedder = embed_query,
     filters: QueryFilters | None = None,
+    kind: ChunkKind | None = None,
 ) -> list[RetrievedChunk]:
     """Return the k chunks most similar to the question, best first.
 
     With filters, only matching reports are searched; if nothing matches, falls back to an
-    unfiltered search so a bad filter is never worse than no filter.
+    unfiltered search so a bad filter is never worse than no filter. `kind` limits the search
+    to text or chart chunks.
     """
     k = k or get_settings().retrieval_top_k
     filters = None if filters is None or filters.is_empty() else filters
     start = time.perf_counter()
     vector = embed(question)
-    rows = _run(conn, vector, k, filters)
+    rows = _run(conn, vector, k, filters, kind)
     if filters and not rows:
         log.info(
             "retrieval.filter_fallback companies=%s years=%s", filters.companies, filters.years
         )
-        rows = _run(conn, vector, k, None)
+        rows = _run(conn, vector, k, None, kind)
 
     results = [
         RetrievedChunk(

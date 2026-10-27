@@ -5,8 +5,10 @@ answer model says the rows don't answer it) or fail (a network or database error
 gets the question. That keeps a wrong route or a broken tool from costing the answer: SQL
 rightly declines "why" questions, for example.
 
-Text search here is corrective RAG (agents/corrective.py: grade the chunks, rewrite the query if
-they fall short) unless ROUTED_CORRECTIVE=false, which uses plain search. With SELF_RAG=true the
+The steps run as a LangGraph state graph (agents/graph.py); this module supplies the answer
+function for each source. Text search here is corrective RAG (agents/corrective.py: grade the
+chunks, rewrite the query if they fall short) unless ROUTED_CORRECTIVE=false, which uses plain
+search. With SELF_RAG=true the
 final answer is then checked against its sources and revised once if needed (agents/self_rag.py).
 With MULTI_SOURCE=true, SQL and graph questions are answered from their rows plus the top text
 chunks together (agents/combined.py).
@@ -16,11 +18,10 @@ from collections.abc import Callable
 
 import psycopg
 from neo4j import Driver
-from pydantic import BaseModel
 
 from reportlens.agents.combined import answer_combined
 from reportlens.agents.corrective import Tools, answer_corrective, crag_cache, default_tools
-from reportlens.agents.events import emit
+from reportlens.agents.graph import AnswerFn, RoutedAnswer, run_routed
 from reportlens.agents.router import Known, Route, route_question
 from reportlens.agents.self_rag import CheckTools, default_check_tools, self_check
 from reportlens.core import llm
@@ -37,19 +38,6 @@ from reportlens.sources.sql_tool import query_for as sql_rows
 from reportlens.sources.web_tool import answer_with_web, web_enabled
 
 log = get_logger(__name__)
-
-AnswerFn = Callable[[str], Answer]
-FALLBACK = "vector"
-
-
-class RoutedAnswer(BaseModel):
-    """The answer, the router's decision, and the sources tried in order (e.g. sql → vector)."""
-
-    answer: Answer
-    route: Route
-    path: list[str]
-    checks: list[str] = []  # Self-RAG's steps, e.g. ["2 unsupported", "revise", "supported"]
-    supported: bool | None = None  # Self-RAG's verdict (None: not checked)
 
 
 def no_lookup_answer(question: str, chat: Callable[..., llm.LLMResponse] = llm.chat) -> Answer:
@@ -116,40 +104,9 @@ def default_answerers(
     return answerers
 
 
-def _add_costs(answer: Answer, earlier: list[Answer]) -> Answer:
-    """The answer, with the tokens and time of the attempts that came before it added in."""
-    return answer.model_copy(
-        update={
-            "input_tokens": answer.input_tokens + sum(a.input_tokens for a in earlier),
-            "output_tokens": answer.output_tokens + sum(a.output_tokens for a in earlier),
-            "latency_s": round(answer.latency_s + sum(a.latency_s for a in earlier), 3),
-        }
-    )
-
-
 def answer_routed(question: str, route: Route, answerers: dict[str, AnswerFn]) -> RoutedAnswer:
-    """Answer from the routed source; if it finds nothing (or isn't available), use text search."""
-    path, attempts = [], []
-    for source in dict.fromkeys([route.source, FALLBACK]):  # the routed source, then vector
-        if source not in answerers:
-            continue
-        path.append(source)
-        emit("step", stage="routed", text=f"asking {source}")
-        if source == FALLBACK:
-            answer = answerers[source](question)
-        else:
-            try:
-                answer = answerers[source](question)
-            except llm.RateLimitError:
-                raise  # out of quota, not a broken tool: falling back would hide it
-            except Exception as err:  # noqa: BLE001  # a broken tool falls back to text search
-                log.warning("routed.source_failed source=%s error=%s", source, err)
-                path[-1] = f"{source} (error)"
-                continue
-        if answer.found or source == FALLBACK:
-            return RoutedAnswer(answer=_add_costs(answer, attempts), route=route, path=path)
-        attempts.append(answer)
-    raise AssertionError("unreachable: the fallback source always answers")
+    """Answer from an already-chosen source; if it finds nothing (or isn't on), use text search."""
+    return run_routed(question, lambda q: route, answerers)
 
 
 def ask(
@@ -160,12 +117,7 @@ def ask(
     check_tools: CheckTools | None = None,
 ) -> RoutedAnswer:
     """Route the question, answer it, and (with SELF_RAG=true) check the answer."""
-    route = route_question(question, known, cache)
-    emit("route", source=route.source, reason=route.reason)
-    routed = answer_routed(question, route, answerers)
-    if not get_settings().self_rag:
-        return routed
-    checked = self_check(routed.answer, check_tools or default_check_tools())
-    return routed.model_copy(
-        update={"answer": checked.answer, "checks": checked.path, "supported": checked.supported}
-    )
+    check = None
+    if get_settings().self_rag:
+        check = lambda answer: self_check(answer, check_tools or default_check_tools())  # noqa: E731
+    return run_routed(question, lambda q: route_question(q, known, cache), answerers, check)

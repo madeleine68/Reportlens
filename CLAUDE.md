@@ -63,7 +63,7 @@ reportlens/
 │   ├── ingest/           # parse.py, chunking.py, embed.py, load.py, tables.py, metrics.py, financials.py, graph.py, graph_names.py, graph_load.py, figures.py
 │   ├── retrieval/        # vector.py, keyword.py, hybrid.py, rerank.py, filters.py
 │   ├── sources/          # sql_tool.py, sql_safety.py, graph_tool.py, cypher_safety.py, web_tool.py (Tavily, off by default)
-│   ├── agents/           # router.py, routed.py (router + fallback), corrective.py, self_rag.py (LangGraph), events.py (progress for the API)
+│   ├── agents/           # router.py, graph.py (routed answers as a LangGraph graph), routed.py (answer function per source), combined.py (multi-source), corrective.py, self_rag.py (LangGraph), events.py (progress for the API)
 │   ├── generation/       # answer.py (answers with page citations), prompts.py
 │   ├── evals/            # questions.py, metrics.py, judge.py, runner.py, routing.py (eval logic)
 │   └── api/              # main.py (FastAPI routes), service.py (answering, resources), schemas.py, access.py (demo password, rate limits), static/index.html (UI)
@@ -120,7 +120,7 @@ Keep this section up to date when commands change.
 
 ## Phase plan
 
-**Current phase: 4** (Phases 0–3 complete; Phase 4 left: the router as a LangGraph node, and measuring multi-step answers; update this line as phases complete)
+**Current phase: 4** (Phases 0–3 complete; Phase 4 left: measuring multi-step (multi-source) answers; update this line as phases complete)
 
 ### Phase 0: Setup
 
@@ -159,7 +159,7 @@ Keep this section up to date when commands change.
 
 ### Phase 4: Agentic layer
 
-- [ ] LangGraph state graph; router node picks `vector | sql | graph | web | none` (router written by Claude at the owner's request on 2026-10-16: `agents/router.py` + `agents/routed.py` with fallback to vector; route accuracy 0.83 vs 0.71 for always-vector; LangGraph not started; full routed eval 2026-10-21: correctness 0.88 vs 0.74 for corrective text search alone, n=53)
+- [x] LangGraph state graph; router node picks `vector | sql | graph | web | none` (router written by Claude at the owner's request on 2026-10-16: `agents/router.py` + `agents/routed.py` with fallback to vector; route accuracy 0.83 vs 0.71 for always-vector; LangGraph graph `agents/graph.py` built 2026-10-26 (route → ask_routed → fallback → optional Self-RAG check; same behaviour, router logic unchanged); full routed eval 2026-10-21: correctness 0.88 vs 0.74 for corrective text search alone, n=53)
 - [x] Self-RAG: decide if retrieval is needed; after answering, check the answer is supported and retry once if not (built 2026-10-17 in `agents/self_rag.py` as a LangGraph graph after the router; "retrieval needed?" is the router's `none` route; off by default (`SELF_RAG=false`); measured 2026-10-22: correctness 0.78 vs 0.89 without it (n=53), because the checker flags arithmetic and SQL/graph facts as unsupported and the revision drops them or refuses; see DECISIONS.md 2026-10-17)
 - [x] Corrective RAG: grade retrieved chunks; if weak, rewrite the query and retry, then fall back to Tavily (built 2026-10-17 as a LangGraph state graph in `agents/corrective.py`, tested with stubs and on 3 trial questions; the router's text-search route uses it unless `ROUTED_CORRECTIVE=false`; measured on n=53: corrective alone 0.74, router alone 0.88, router + corrective 0.89; see DECISIONS.md 2026-10-17)
 - [ ] Multi-step questions (e.g. comparing companies across SQL and text) (simple version built 2026-10-26 in `agents/combined.py`, prompt written by Claude at the owner's request: questions routed to SQL or the graph are answered from their rows plus the top text chunks in one call, `MULTI_SOURCE=true`, off by default; trial: q023 headcount now exact; full n=53 eval pending; a planner that splits questions into sub-questions is not built)

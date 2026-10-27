@@ -523,3 +523,16 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 
 **Evidence:** Neon has 6,075 chunks and 671 `financials` rows; the reader role can read `financials`, and a `DELETE` or a read of `chunks` is refused there. AuraDB has 148 nodes and 410 relationships, as locally. 3 new tests (daily count in Postgres, the hourly check before taking a daily slot, the memory fallback); 358 pass.
 - Later the same day (owner's request): the Hugging Face path was removed (`scripts/deploy_space.py`, `deploy/space_README.md`, the `HF_*` settings); its folder assembly moved into `scripts/deploy_cloudrun.py`.
+
+## 2026-10-26 — Routed answers as one LangGraph state graph
+
+**Context:** Corrective RAG and Self-RAG were LangGraph graphs, but the router and its fallback to text search were a plain Python loop in `agents/routed.py`, so the Phase 4 item "LangGraph state graph; router node" was open. The routing behaviour itself was measured (0.88 alone, 0.89 with corrective RAG) and shouldn't change.
+
+**Options considered:**
+- Keep the loop: it works, but the control flow (route, ask, fall back, check) is buried in a `for` loop with special cases.
+- Rewrite the router inside the graph: would change owner-reviewed logic in `agents/router.py`.
+- **A graph that wires existing pieces:** nodes `route`, `ask_routed`, `fallback` and an optional `check`, each calling the existing function.
+
+**Decision:** `agents/graph.py` holds the graph; the router is passed in as a function and each source's answer function comes from `agents/routed.py`, so `ask()` and `answer_routed()` keep their signatures and the API, CLI and evals are unchanged. Behaviour kept: nothing found or a tool error goes to text search, with the first attempt's tokens added; a rate-limit error stops the question; a source that isn't on (web, or the graph without Neo4j) goes straight to text search; Self-RAG runs on either branch only when `SELF_RAG=true`. The step limit is `AGENT_MAX_STEPS`, as in the other graphs.
+
+**Eval evidence:** none needed for behaviour: the existing routed tests pass unchanged, plus 7 graph tests (paths, costs, rate limits, check node, streamed events). A live question (q045) took `graph` and answered correctly. Built on a separate branch while the multi-source eval ran, so that run's code didn't change mid-run.

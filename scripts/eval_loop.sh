@@ -37,5 +37,6 @@ run() {  # name, then run_evals.py arguments
 # Done 2026-10-19: "routed corrective" --source routed, "corrective" --source corrective.
 # Settings placed before `run` apply only to that run.
 # Done 2026-10-22: "routed" (ROUTED_CORRECTIVE=false), "routed corrective self-rag" (SELF_RAG=true).
-RETRIEVAL_FIGURE_SLOTS=1 run "routed corrective + chart slot" --source routed --notes "RETRIEVAL_FIGURE_SLOTS=1"
+# Done 2026-10-26: "routed corrective + chart slot" (RETRIEVAL_FIGURE_SLOTS=1).
+MULTI_SOURCE=true run "routed corrective + multi-source" --source routed --notes "MULTI_SOURCE=true (SQL/graph rows + top text chunks, one answer call)"
 echo "=== $(date) all evals done"

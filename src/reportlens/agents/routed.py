@@ -8,6 +8,8 @@ rightly declines "why" questions, for example.
 Text search here is corrective RAG (agents/corrective.py: grade the chunks, rewrite the query if
 they fall short) unless ROUTED_CORRECTIVE=false, which uses plain search. With SELF_RAG=true the
 final answer is then checked against its sources and revised once if needed (agents/self_rag.py).
+With MULTI_SOURCE=true, SQL and graph questions are answered from their rows plus the top text
+chunks together (agents/combined.py).
 """
 
 from collections.abc import Callable
@@ -16,6 +18,7 @@ import psycopg
 from neo4j import Driver
 from pydantic import BaseModel
 
+from reportlens.agents.combined import answer_combined
 from reportlens.agents.corrective import Tools, answer_corrective, crag_cache, default_tools
 from reportlens.agents.events import emit
 from reportlens.agents.router import Known, Route, route_question
@@ -26,8 +29,11 @@ from reportlens.core.logging import get_logger
 from reportlens.generation import prompts
 from reportlens.generation.answer import Answer, answer_question, is_not_found
 from reportlens.ingest.graph import FactCache
+from reportlens.retrieval.search import search
 from reportlens.sources.graph_tool import answer_with_graph
+from reportlens.sources.graph_tool import query_for as graph_rows
 from reportlens.sources.sql_tool import answer_with_sql, as_answer
+from reportlens.sources.sql_tool import query_for as sql_rows
 from reportlens.sources.web_tool import answer_with_web, web_enabled
 
 log = get_logger(__name__)
@@ -98,6 +104,13 @@ def default_answerers(
     }
     if driver is not None:
         answerers["graph"] = lambda q: as_answer(answer_with_graph(driver, q))
+    if get_settings().multi_source:
+        text = lambda q: search(conn, q)  # noqa: E731
+        answerers["sql"] = lambda q: answer_combined(q, "sql", lambda q: sql_rows(reader, q), text)
+        if driver is not None:
+            answerers["graph"] = lambda q: answer_combined(
+                q, "graph", lambda q: graph_rows(driver, q), text
+            )
     if web_enabled():
         answerers["web"] = answer_with_web
     return answerers

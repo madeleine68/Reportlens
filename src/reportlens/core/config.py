@@ -116,6 +116,9 @@ class Settings(BaseSettings):
     agent_max_steps: int = 12
     # The router's text-search route (and its fallback) runs corrective RAG; false: plain search.
     routed_corrective: bool = True
+    # Phase 4 multi-source answers: questions routed to SQL or the graph are answered from their
+    # rows plus the top text chunks, in one main-LLM call (agents/combined.py). Off until measured.
+    multi_source: bool = False
     # Phase 4 Self-RAG: the fast model checks each routed answer against its sources; if claims
     # are unsupported, the main model revises it (at most this many times). Off until measured.
     self_rag: bool = False

@@ -131,10 +131,14 @@ def query_for(
     return None, [], [], error
 
 
+def row_text(columns: list[str], row: list[Any]) -> str:
+    """One row as 'column=value, ...' on a single line (line breaks in values become spaces)."""
+    return ", ".join(f"{c}={' '.join(str(v).split())}" for c, v in zip(columns, row, strict=True))
+
+
 def format_row(number: int, columns: list[str], row: list[Any]) -> str:
-    """One row as '[n] column=value, ...' on a single line (line breaks in values become spaces)."""
-    pairs = ", ".join(f"{c}={' '.join(str(v).split())}" for c, v in zip(columns, row, strict=True))
-    return f"[{number}] {pairs}"
+    """One row as '[n] column=value, ...', the way the answer model cites it."""
+    return f"[{number}] {row_text(columns, row)}"
 
 
 def format_rows(columns: list[str], rows: list[list[Any]]) -> str:

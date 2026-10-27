@@ -59,7 +59,9 @@ def format_pages(pages: list[int]) -> str:
     return f"{label} {', '.join(map(str, pages))}"
 
 
-def build_messages(question: str, chunks: list[RetrievedChunk]) -> list[llm.Message]:
+def build_messages(
+    question: str, chunks: list[RetrievedChunk], system: str = prompts.ANSWER_SYSTEM
+) -> list[llm.Message]:
     """System rules plus the numbered sources and the question."""
     sources = "\n\n".join(
         prompts.SOURCE_HEADER.format(
@@ -74,7 +76,7 @@ def build_messages(question: str, chunks: list[RetrievedChunk]) -> list[llm.Mess
         for i, chunk in enumerate(chunks, start=1)
     )
     return [
-        {"role": "system", "content": prompts.ANSWER_SYSTEM},
+        {"role": "system", "content": system},
         {"role": "user", "content": prompts.ANSWER_USER.format(sources=sources, question=question)},
     ]
 

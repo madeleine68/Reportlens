@@ -186,7 +186,7 @@ The graph wins the one question that spans two reports (*"Who replaced Nadine Ah
 
 Mixed in with text, charts mostly crowd out text: Scotiabank's page 17 alone has 5 charts, and they push the right text chunk down without the right chart reaching the top 5. With a reserved slot, charts are searched separately and the best one replaces the 5th text chunk, so each kind gets its own competition. The cost is one question whose only right page was that 5th text chunk, and a second rerank (about 4 s on a laptop CPU).
 
-In the routed setup the slot barely gets a chance: the router sends two of the four chart questions ("which market contributed the most", "what share of revenues came from each segment") to SQL, which answers from segment figures that aren't the chart's numbers. The slot therefore stays off by default for now; routing share and breakdown questions to text search would let it help.
+In the routed setup the slot barely gets a chance: the router sends two of the four chart questions ("which market contributed the most", "what share of revenues came from each segment") to SQL, which answers from segment figures that aren't the chart's numbers. On all 53 questions, router + corrective RAG + the chart slot scores 0.87 correctness (faithfulness 0.98, p50 13.0 s), against 0.89 without the slot: within run-to-run noise. The one chart question that did reach text search (RBC's AUM split, after SQL found nothing) went from wrong to right. The slot therefore stays off by default for now; routing share and breakdown questions to text search would let it help.
 
 **Phase 4 results:** the router, corrective RAG and Self-RAG, each switched on and off on all 53 questions (the [headline table](#headline-results) above):
 

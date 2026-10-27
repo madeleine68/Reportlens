@@ -120,7 +120,7 @@ Keep this section up to date when commands change.
 
 ## Phase plan
 
-**Current phase: 4** (Phase 3 complete except measuring the chart summaries; update this line as phases complete)
+**Current phase: 4** (Phases 0–3 complete; Phase 4 left: the router as a LangGraph node, and measuring multi-step answers; update this line as phases complete)
 
 ### Phase 0: Setup
 
@@ -150,7 +150,7 @@ Keep this section up to date when commands change.
 
 ### Phase 3: Structured data
 
-- [ ] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts: `ingest/figures.py` built, all 384 candidates described by 2026-10-25 and 379 loaded as chart chunks (5 judged not charts); measured 2026-10-25 (retrieval only, n=53): recall@5 0.81 vs 0.80 without charts, MRR 0.61 vs 0.63, 2 of 4 chart-only questions found; stays off (`RETRIEVAL_FIGURES=false`). One reserved chart slot instead (`RETRIEVAL_FIGURE_SLOTS=1`, charts searched separately in `retrieval/search.py`): recall@5 0.85, MRR 0.65, all 4 chart-only questions found, p50 8.4s vs 4.7s; off by default until measured on answers; see DECISIONS.md 2026-10-13 and 2026-10-16)
+- [x] Tables preserved as structured data; charts summarized by a multimodal LLM (tables done and measured, `reportlens_tables` DB, not the default; charts: `ingest/figures.py` built, all 384 candidates described by 2026-10-25 and 379 loaded as chart chunks (5 judged not charts); measured 2026-10-25 (retrieval only, n=53): recall@5 0.81 vs 0.80 without charts, MRR 0.61 vs 0.63, 2 of 4 chart-only questions found; stays off (`RETRIEVAL_FIGURES=false`). One reserved chart slot instead (`RETRIEVAL_FIGURE_SLOTS=1`, charts searched separately in `retrieval/search.py`): recall@5 0.85, MRR 0.65, all 4 chart-only questions found, p50 8.4s vs 4.7s; on answers (routed corrective, n=53) 0.87 vs 0.89, within noise, because the router sends most chart questions to SQL; off by default; see DECISIONS.md 2026-10-13 and 2026-10-16)
 - [x] `financials` table: `(company, year, metric, value, unit, source_page)` (plus report_year, scope, basis; 12 metrics from `table_cells` by rules + vote; 29/33 eval figures found; see DECISIONS.md 2026-10-14)
 - [x] Text-to-SQL tool: read-only DB role, approved tables only, query timeout, row limit (`sources/sql_tool.py` + `sql_safety.py` with sqlglot; correctness 0.80 (with the comparison rule) vs 0.67 for text on the 33 numeric/trend/comparison questions; see DECISIONS.md 2026-10-14 and 2026-10-15)
 - [x] Neo4j graph: Company, Segment, Subsidiary, Executive nodes and their relationships (segments from `financials`, subsidiaries and executives by fast-LLM extraction, every relationship with report year and page; 51 segment, 247 subsidiary and 112 executive relationships across BCE, RBC and Scotiabank; see DECISIONS.md 2026-10-16)
@@ -160,10 +160,10 @@ Keep this section up to date when commands change.
 ### Phase 4: Agentic layer
 
 - [ ] LangGraph state graph; router node picks `vector | sql | graph | web | none` (router written by Claude at the owner's request on 2026-10-16: `agents/router.py` + `agents/routed.py` with fallback to vector; route accuracy 0.83 vs 0.71 for always-vector; LangGraph not started; full routed eval 2026-10-21: correctness 0.88 vs 0.74 for corrective text search alone, n=53)
-- [ ] Self-RAG: decide if retrieval is needed; after answering, check the answer is supported and retry once if not (built 2026-10-17 in `agents/self_rag.py` as a LangGraph graph after the router; "retrieval needed?" is the router's `none` route; off by default (`SELF_RAG=false`); measured 2026-10-22: correctness 0.78 vs 0.89 without it (n=53), because the checker flags arithmetic and SQL/graph facts as unsupported and the revision drops them or refuses; see DECISIONS.md 2026-10-17)
-- [ ] Corrective RAG: grade retrieved chunks; if weak, rewrite the query and retry, then fall back to Tavily (built 2026-10-17 as a LangGraph state graph in `agents/corrective.py`, tested with stubs and on 3 trial questions; the router's text-search route uses it unless `ROUTED_CORRECTIVE=false`; measured on n=53: corrective alone 0.74, router alone 0.88, router + corrective 0.89; see DECISIONS.md 2026-10-17)
-- [ ] Multi-step questions (e.g. comparing companies across SQL and text)
-- [ ] Max-step limit and clear error handling on every node (routed answers: a source that raises falls back to text search; corrective RAG: `AGENT_MAX_STEPS` as LangGraph's recursion limit, refusal past it, grade/rewrite failures fail open)
+- [x] Self-RAG: decide if retrieval is needed; after answering, check the answer is supported and retry once if not (built 2026-10-17 in `agents/self_rag.py` as a LangGraph graph after the router; "retrieval needed?" is the router's `none` route; off by default (`SELF_RAG=false`); measured 2026-10-22: correctness 0.78 vs 0.89 without it (n=53), because the checker flags arithmetic and SQL/graph facts as unsupported and the revision drops them or refuses; see DECISIONS.md 2026-10-17)
+- [x] Corrective RAG: grade retrieved chunks; if weak, rewrite the query and retry, then fall back to Tavily (built 2026-10-17 as a LangGraph state graph in `agents/corrective.py`, tested with stubs and on 3 trial questions; the router's text-search route uses it unless `ROUTED_CORRECTIVE=false`; measured on n=53: corrective alone 0.74, router alone 0.88, router + corrective 0.89; see DECISIONS.md 2026-10-17)
+- [ ] Multi-step questions (e.g. comparing companies across SQL and text) (simple version built 2026-10-26 in `agents/combined.py`, prompt written by Claude at the owner's request: questions routed to SQL or the graph are answered from their rows plus the top text chunks in one call, `MULTI_SOURCE=true`, off by default; trial: q023 headcount now exact; full n=53 eval pending; a planner that splits questions into sub-questions is not built)
+- [x] Max-step limit and clear error handling on every node (router: falls back to text search if its call fails; routed answers: a source that raises falls back to text search; corrective RAG: `AGENT_MAX_STEPS` as LangGraph's recursion limit, refusal past it, grade/rewrite failures fail open; Self-RAG: a failed revision keeps the earlier answer; rate-limit errors are never failed open)
 
 ### Phase 5: Ship
 

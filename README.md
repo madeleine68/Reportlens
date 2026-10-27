@@ -94,8 +94,8 @@ uv run python scripts/ask.py --sql "Which bank had the higher CET1 ratio in 2024
 | 0. Setup | Config, LLM wrapper, database, tests | ✅ Done |
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
-| 3. Structured data | Real tables, SQL tool, knowledge graph, chart summaries | 🟡 Built and measured: SQL tool (0.80 vs 0.67 on numeric questions), graph tool, all 384 chart candidates described; whether the chart slot is on by default is still to decide |
-| 4. Agentic layer | Router, Self-RAG, Corrective RAG | 🟡 Built and measured: router 0.88, router + corrective RAG 0.89, Self-RAG 0.78 (off); multi-step questions not started |
+| 3. Structured data | Real tables, SQL tool, knowledge graph, chart summaries | ✅ Done: SQL tool (0.80 vs 0.67 on numeric questions), graph tool, 379 chart summaries with a reserved search slot (recall 0.85 vs 0.80) |
+| 4. Agentic layer | Router, Self-RAG, Corrective RAG | 🟡 Router 0.88, router + corrective RAG 0.89, Self-RAG 0.78 (off), step limits and error handling done; left: the router as a LangGraph node, and measuring multi-source answers |
 | 5. Ship | API, UI, deployment | 🟡 API (`/ask`, `/ask/stream` with progress events) and web UI built; deployed on Cloud Run; demo video to record |
 
 **Corpus:** 12 reports ingested, also parsed with tables: BCE, RBC and Scotiabank, fiscal 2021–2024. TD and Shopify reports are downloaded but not ingested.
@@ -326,7 +326,7 @@ flowchart LR
 - **Hybrid merge (RRF)** (`retrieval/hybrid.py`): takes the top 20 from vector search and the top 20 from keyword search, and scores each chunk by adding `1 / (60 + rank)` for every list it appears in. Only the ranks count, not the raw scores, which are on different scales. Chunks both retrievers like rise to the top. Use it with `RETRIEVAL_MODE=hybrid`.
 - **Rerank** (`retrieval/rerank.py`): the retriever fetches 40 candidates, and a cross-encoder (`ms-marco-MiniLM-L-6-v2`) reads the question and each candidate *together* and scores how well the candidate answers it. The best 5 are kept. That's slower but much more accurate than the retrievers, which look at the question and chunks separately. Turn it on with `RETRIEVAL_RERANK=true`; it works on top of any retrieval mode.
 
-### Phase 3: Structured data 🟡
+### Phase 3: Structured data ✅
 
 Many questions are about numbers in tables, which plain text search handles poorly. This phase adds two structured sources next to the vector search.
 
@@ -448,7 +448,7 @@ flowchart TD
   - **One revision at most** (`SELF_RAG_MAX_REVISIONS=1`). An answer that still fails is returned marked unsupported rather than refused, because the checker can be wrong too.
   - **Its own prompt, not the eval judge's:** the check follows each sentence's citations, while the eval's faithfulness judge splits the whole answer into claims. Both use the fast model, so a gain in faithfulness is read with care; correctness and the revision rate matter more.
 - **Safety limits:** corrective RAG stops after `AGENT_MAX_STEPS` and refuses rather than loop; a source that raises an error falls back to text search; grading and rewriting fail open (keep every chunk, search the same query again). A rate-limit error is never failed open: it stops the question, so an eval run can't record a quota error as a wrong answer.
-- **Not built yet: multi-step questions,** such as a comparison that needs a figure from SQL and an explanation from the text. Each question currently goes to one source.
+- **Multi-source answers** (`agents/combined.py`, `MULTI_SOURCE=true`, off until measured): a question routed to SQL or the graph is answered from the rows *and* the top 5 text chunks, numbered as one source list, in a single main-LLM call that replaces the tool's own answer call. The rows give exact figures; the text gives what rows can't hold: reasons, context, chart breakdowns, and figures the table rounds (BCE's headcount: 40,000 in the table, 40,390 in the text, which the combined answer now gets right). If there are no rows, it answers from the text alone. Splitting a question into sub-questions for different sources isn't built: the eval set has almost no questions that need it.
 
 ### Phase 5: Ship 🟡
 

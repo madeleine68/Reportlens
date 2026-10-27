@@ -1,11 +1,11 @@
 """Parse annual report PDFs into page-tagged blocks with Docling, caching the result as JSON.
 
 Phase 1 runs Docling in a light mode (no OCR, no table-structure model) because the reports are
-digital PDFs and the dev machine is a CPU-only Intel Mac. Phase 3 adds PARSE_TABLES, which also
+digital PDFs and parsing runs on CPU. Phase 3 adds PARSE_TABLES, which also
 runs the table-structure model so tables keep their rows and columns. See DECISIONS.md.
 
 Two cache files per PDF, in data/parsed/{company}/:
-- {year}.docling.json: Docling's raw output (slow to produce: ~7 min per report in light mode)
+- {year}.docling.json: Docling's raw output (slow to produce)
 - {year}.json: our ParsedDocument, extracted from the Docling output (fast)
 So changing extraction logic only re-runs extraction, not Docling. Table parses use
 {year}.tables.docling.json and {year}.tables.json, so both kinds of parse can be kept.
@@ -39,8 +39,8 @@ TABLES_CONVERTER_VERSION = "2-tables"  # same, for PARSE_TABLES=true
 # Bump when blocks_from_docling changes (re-extracts from the cached Docling output).
 EXTRACT_VERSION = "2"
 
-# Table mode converts this many pages per subprocess. On this machine the table model segfaults
-# or hangs at random, more often the longer one process runs, so short isolated slices are retried
+# Table mode converts this many pages per subprocess. On CPU the table model can segfault
+# or hang at random, more often the longer one process runs, so short isolated slices are retried
 # instead of losing a whole report. See DECISIONS.md.
 TABLE_SLICE_PAGES = 20
 SLICE_TIMEOUT_S = 600

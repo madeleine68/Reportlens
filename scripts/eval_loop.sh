@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run Phase 4 evals one after another on the free tier, waiting out the daily token limit.
 # Each run resumes where it stopped (run_evals.py --resume), so a run can span several days.
-# Usage (detached, survives closing the terminal; keep the Mac plugged in):
-#   nohup caffeinate -i scripts/eval_loop.sh >> data/cache/evals_run.log 2>&1 &
+# Usage (detached, survives closing the terminal; the machine must stay awake):
+#   nohup scripts/eval_loop.sh >> data/cache/evals_run.log 2>&1 &
 set -u
 cd "$(dirname "$0")/.."
 

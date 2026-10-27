@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     llm_price_output_per_mtok: float = 0.0
 
     # Parsing: run Docling's table-structure model (TableFormer) so tables keep their rows and
-    # columns. Slow on CPU (~4.6 s per table); table parses get their own cache files.
+    # columns. Much slower than light mode; table parses get their own cache files.
     parse_tables: bool = False
 
     # Embeddings and chunking. bge-small reads at most 512 tokens, so chunks stay well under

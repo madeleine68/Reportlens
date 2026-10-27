@@ -6,11 +6,11 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 
 ## 2026-10-08 — Free LLM via an OpenAI-compatible client
 
-**Context:** This is a portfolio project, so LLM calls should cost nothing. The dev machine (Intel Mac, 8 GB RAM) is too weak to run a useful model locally.
+**Context:** This is a portfolio project, so LLM calls should cost nothing. Running a useful model locally would need more memory and compute than a typical development machine has.
 
 **Options considered:**
 - Paid APIs (Anthropic, OpenAI): best quality, but they cost money.
-- Local Ollama: free and private, but slow and low quality on 8 GB of RAM.
+- Local Ollama: free and private, but slow and low quality on modest hardware.
 - Free hosted tiers (Groq, Google Gemini): free, fast, rate-limited.
 
 **Decision:** Use the `openai` Python SDK against any OpenAI-compatible endpoint, configured with `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL_MAIN` and `LLM_MODEL_FAST`. Default to the Groq free tier: `llama-3.3-70b-versatile` as the main model and `llama-3.1-8b-instant` as the fast one. Gemini or Ollama can be swapped in by editing `.env` alone, with no code change. Structured output uses JSON mode plus Pydantic validation, with one retry, because every one of these providers supports that.
@@ -19,16 +19,16 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 
 ## 2026-10-08 — Docling in light mode on CPU for Phase 1 parsing
 
-**Context:** Phase 1 needs every annual report parsed with page numbers kept. The dev machine is an Intel Mac with 8 GB of RAM and no GPU. PyTorch stopped publishing Intel Mac wheels after 2.2.2, and newer `docling-parse` releases have no Intel Mac wheel either.
+**Context:** Phase 1 needs every annual report parsed with page numbers kept. Parsing must run on a CPU, without a GPU. PyTorch stopped publishing x86 macOS wheels after 2.2.2, and newer `docling-parse` releases have none either, so the versions are pinned to stay installable there.
 
 **Options considered:**
 - Full Docling pipeline (OCR + TableFormer): best tables, but slowest, and the reports are digital PDFs that don't need OCR.
 - Light Docling (layout model only, `do_ocr=False`, `do_table_structure=False`): keeps headings, page numbers and table regions; tables come out as plain lines, not rows and columns.
 - Plain text extraction (pypdfium2): fastest, but no headings or table regions, and these PDFs have no bookmarks to recover sections from.
 
-**Decision:** Light Docling, pinned to `torch==2.2.2`, `numpy<2` and `docling-parse<5` for Intel Mac. Without TableFormer, Docling emits each table both as one squashed cell and as loose lines inside the table's area, so extraction folds those lines into a single table block. The raw Docling output is cached separately from our blocks (`CONVERTER_VERSION` vs `EXTRACT_VERSION`), so extraction changes don't re-run Docling. Revisit in Phase 3, when tables need real structure: turn on TableFormer, bump `CONVERTER_VERSION`, re-run.
+**Decision:** Light Docling, pinned to `torch==2.2.2`, `numpy<2` and `docling-parse<5` (see above). Without TableFormer, Docling emits each table both as one squashed cell and as loose lines inside the table's area, so extraction folds those lines into a single table block. The raw Docling output is cached separately from our blocks (`CONVERTER_VERSION` vs `EXTRACT_VERSION`), so extraction changes don't re-run Docling. Revisit in Phase 3, when tables need real structure: turn on TableFormer, bump `CONVERTER_VERSION`, re-run.
 
-**Eval evidence:** none yet. Measured on RBC 2023 (237 pages): 7.4 min, 2.0 GB peak RAM, 3,279 blocks (25,972 before the table fix). Cache hit: 0.1 s.
+**Eval evidence:** none yet. Measured on RBC 2023 (237 pages): 3,279 blocks (25,972 before the table fix).
 
 ## 2026-10-09 — Naive chunks of 450 tokens with 50 overlap
 
@@ -41,11 +41,11 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 
 **Decision:** 450 tokens with 50 overlap, counted with the embedding model's own tokenizer, configurable via `CHUNK_TOKENS` / `CHUNK_OVERLAP`. Chunks are fixed windows over each report's joined text, ignoring headings and tables, so Phase 2 has an honest baseline to beat. Each chunk lists every page it touches, for citations.
 
-**Eval evidence:** none yet. On 12 reports: 5,991 chunks, ~1 s per report, longest chunk re-tokenizes to 452 tokens (limit 512). About 46% of chunks span more than one page.
+**Eval evidence:** none yet. On 12 reports: 5,991 chunks, longest chunk re-tokenizes to 452 tokens (limit 512). About 46% of chunks span more than one page.
 
 ## 2026-10-09 — Postgres schema and embedding storage
 
-**Context:** Chunks need to be stored with their vectors and the metadata Phase 2 will filter on, and re-running ingestion must not re-embed unchanged reports (~1–2 min each on CPU).
+**Context:** Chunks need to be stored with their vectors and the metadata Phase 2 will filter on, and re-running ingestion must not re-embed unchanged reports (embedding is the slow part of loading).
 
 **Options considered:**
 - Migration tool (Alembic) vs one idempotent `schema.sql` applied on connect.
@@ -54,7 +54,7 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 
 **Decision:** One `schema.sql` (`CREATE ... IF NOT EXISTS`), simple to read and explain; revisit if the schema starts changing often. A `documents` row per report stores the PDF hash plus an `ingest_config` fingerprint (converter and extract versions, chunk settings, embedding model); if it matches, the report is skipped, otherwise its chunks are replaced in one transaction. HNSW cosine index, matching what a production setup would use, even though an exact scan over ~6k rows is also fast. Company, year and section are columns on `chunks` so Phase 2 filters are plain `WHERE` clauses. Queries get bge's instruction prefix via a separate `embed_query()`; passages don't.
 
-**Eval evidence:** none yet. 12 reports → 5,991 chunks loaded in ~19 min; unchanged re-run takes 26 s (mostly imports).
+**Eval evidence:** none yet. 12 reports → 5,991 chunks loaded; an unchanged re-run skips every report.
 
 ## 2026-10-09 — Citations as [n] markers parsed in code
 
@@ -199,16 +199,16 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 
 ## 2026-10-11 — Table-mode parsing in isolated 20-page slices
 
-**Context:** Phase 3 turns on Docling's table-structure model (`PARSE_TABLES=true`). On this Intel Mac (CPU, `torch==2.2.2`), whole-report conversions failed at random: two full ingest runs segfaulted (exit 139) partway through their second report, and RBC 2021 ran for over 1.5 hours with no result. Diagnosis: timed 20-page slices of RBC 2021 each finished in 1–4 minutes (about 27 min total), except one slice that segfaulted. That slice then passed 3 times in a row, and each of its 20 pages passed twice on its own. A second conversion in the same process was also much slower than the first. So the failure is random, and it gets likelier the longer one process converts.
+**Context:** Phase 3 turns on Docling's table-structure model (`PARSE_TABLES=true`). On CPU with the pinned `torch==2.2.2`, whole-report conversions failed at random: two full ingest runs segfaulted (exit 139) partway through their second report, and RBC 2021 hung with no result. Diagnosis: 20-page slices of RBC 2021 each finished, except one slice that segfaulted. That slice then passed 3 times in a row, and each of its 20 pages passed twice on its own. A second conversion in the same process was also much slower than the first. So the failure is random, and it gets likelier the longer one process converts.
 
 **Options considered:**
 - Retry whole reports: a 25+ minute conversion that fails at random wastes the most time per failure, and RBC never completed.
-- Upgrade torch/Docling: not possible on Intel Mac (no newer wheels; see the 2026-10-08 entry).
+- Upgrade torch/Docling: not possible with the pinned versions (no newer wheels; see the 2026-10-08 entry).
 - Convert short page slices, each in a fresh subprocess with a timeout and retries, then merge them.
 
 **Decision:** In table mode, `convert_pdf` splits the PDF into 20-page slices (`TABLE_SLICE_PAGES`). Each slice runs in a fresh Python process (`python -m reportlens.ingest.parse`) with a 10-minute timeout (`SLICE_TIMEOUT_S`) and up to 3 attempts (`SLICE_ATTEMPTS`). The slices are merged with `DoclingDocument.concatenate`, which keeps the original page numbers (checked on BCE 2024 pages 1–6: same pages and the same 42 blocks as the two slices). The ingest process itself no longer runs Docling, so embedding and table parsing never share a process. Light mode is unchanged.
 
-**Eval evidence:** none (robustness only). Cost: about one model load per slice (~15 s × 12 slices per report).
+**Eval evidence:** none (robustness only). Cost: one extra model load per slice.
 
 ## 2026-10-13 — Table chunks measured; naive chunks stay the text-search default
 
@@ -233,7 +233,7 @@ Format: `## YYYY-MM-DD — Title` / Context / Options considered / Decision / Ev
 - **q001 is still wrong, now for a new reason:** the model cited T21 *Canadian Banking financial performance* and reported that segment's $4,019 million, not the bank's $7,410 million. The table was intact, but the model ignored that it covers one segment. That's a case for the `financials` table, where segment and total are separate columns, not something the model must infer.
 - **Part of the faithfulness drop is the judge's error:** in q023 the cited chunk says "our team consisted of 40,390 employees", yet the judge marked "BCE had 40,390 employees" as unsupported. q004 and q039 were not checked.
 
-**Cost:** table-mode parsing took about 35–45 min per report on this CPU (vs ~7 min in light mode); one full answer-level run (~113k answer-model tokens, most of a day's free-tier quota).
+**Cost:** table-mode parsing is several times slower than light mode; one full answer-level run (~113k answer-model tokens, most of a day's free-tier quota).
 
 ## 2026-10-14 — Table cells extracted with rules, not an LLM
 
@@ -363,7 +363,7 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 
 **Options considered:**
 - **Send every picture to a vision model:** ~1,170 calls at ~2.8k tokens each, most of them photos and logos.
-- **Docling's picture classifier:** needs a re-parse of every report (~7 min each in light mode, much longer with the extra model on this CPU).
+- **Docling's picture classifier:** needs a re-parse of every report, slower still with the extra model.
 - **Store only the PDF text inside each picture, no LLM:** free and exact, but axis ticks and labels without the chart's shape don't say what it shows, and bar values that aren't printed are lost.
 - **A rule picks candidates, a vision model describes them.**
 
@@ -435,7 +435,7 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 - "Who won the 2023 Stanley Cup?": the rewrite copied the prompt's examples ("... net income Common Equity Tier 1 ratio"). The examples were trimmed and a "don't add topics" rule added. Rewrites of out-of-corpus questions are still unhelpful (they list the companies' headline metrics), but harmless: both rounds grade 0/5 and the question is refused.
 - "How did RBC's and Scotiabank's dividends per share compare in 2024?": round 1 graded 1/5 relevant (Scotiabank only); the rewrite asked for both; round 2 found 3 relevant, and the answer cites Scotiabank $4.24 and RBC $5.60.
 
-**Cost:** one ~3k-token fast-model call per search (two with a rewrite) plus up to two cross-encoder reranks (10–20 s each on this laptop's CPU). Main-model tokens should fall, since only relevant chunks are sent. Fast-model calls are not counted in Cost/query, as for filters and the router.
+**Cost:** one ~3k-token fast-model call per search (two with a rewrite) plus up to two cross-encoder reranks. Main-model tokens should fall, since only relevant chunks are sent. Fast-model calls are not counted in Cost/query, as for filters and the router.
 
 **In the router:** the router's `vector` route, and the fallback when SQL, the graph or the web find nothing, now run corrective RAG (`ROUTED_CORRECTIVE=true`, the default; `false` restores plain search so the routed eval can be run both ways). Live check: "Why did BCE's employee headcount change in 2024?" → routed to vector → grade 3/5 relevant, enough → answer citing BCE 2024 pp. 82–83 and 46–47.
 
@@ -514,7 +514,7 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 
 **Context:** Creating the Space failed: "Static Spaces are free for everyone, but hosting Gradio and Docker Spaces on free cpu-basic requires a PRO subscription." The app needs at least 1 GB of RAM (~0.5 GB idle with both models loaded), which rules out 512 MB free tiers such as Render's. Neon and AuraDB were already loaded.
 
-**Options considered:** Hugging Face PRO (~$9/month, no code change); **Google Cloud Run** (free monthly allowance, card required, scales to zero so the first question after idle waits ~30–60 s); the laptop behind a tunnel (free, only while the Mac is on).
+**Options considered:** Hugging Face PRO (~$9/month, no code change); **Google Cloud Run** (free monthly allowance, card required, scales to zero so the first question after idle waits ~30–60 s); a home machine behind a tunnel (free, only while it is on).
 
 **Decision (owner's choice):** Cloud Run, 2 GiB / 1 CPU, min 0 and max 1 instance (the hourly limit is counted in memory), startup CPU boost, 5-minute timeout, public.
 - `scripts/deploy_cloudrun.py`: `--setup` (APIs, an Artifact Registry repository, build and secret-reader roles for the compute service account), `--secrets` (Secret Manager, values sent on stdin), then build with Cloud Build from the same small folder as the Space (about 1 MB uploaded; no local Docker needed) and `gcloud run deploy` with plain variables from a temporary YAML file and secrets by reference.

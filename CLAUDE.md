@@ -83,7 +83,7 @@ reportlens/
 uv sync                                              # install deps
 docker compose up -d                                 # start postgres and neo4j
 uv run python scripts/ingest_all.py                  # parse, chunk, embed, load
-PARSE_TABLES=true CHUNKING=tables POSTGRES_DB=reportlens_tables uv run python scripts/ingest_all.py  # Phase 3: tables kept as rows/columns (~25 min/report on CPU)
+PARSE_TABLES=true CHUNKING=tables POSTGRES_DB=reportlens_tables uv run python scripts/ingest_all.py  # Phase 3: tables kept as rows/columns (slow)
 uv run python scripts/load_tables.py                 # Phase 3: table numbers -> table_cells -> financials (needs table parses)
 uv run python scripts/check_financials.py            # financials vs the eval set's expected numbers
 uv run python scripts/load_graph.py --show           # Phase 3: build the Neo4j graph (fast LLM, cached) and print it
@@ -105,7 +105,7 @@ uv run python scripts/ask.py --corrective "How did RBC's and Scotiabank's divide
 uv run python evals/run_evals.py --name "corrective" --source corrective   # Phase 4: corrective RAG eval (needs a day's quota)
 uv run python evals/run_evals.py --name "corrective" --source corrective --resume   # continue a run stopped by the daily limit (exit 3)
 SELF_RAG=true uv run python scripts/ask.py --routed "Why did BCE's headcount change in 2024?"   # Phase 4: routed answer + Self-RAG check
-nohup caffeinate -i scripts/eval_loop.sh >> data/cache/evals_run.log 2>&1 &   # Phase 4 evals back to back, resuming after each daily limit
+nohup scripts/eval_loop.sh >> data/cache/evals_run.log 2>&1 &   # Phase 4 evals back to back, resuming after each daily limit
 uv run uvicorn reportlens.api.main:app --reload      # Phase 5: start the API + UI (UI at http://localhost:8000, docs at /docs; loads models at startup)
 uv run python scripts/deploy_data.py                 # Phase 5: copy local Postgres → Neon and the graph → AuraDB (targets in .env.deploy)
 uv run python scripts/deploy_cloudrun.py --setup     # Phase 5, once: enable APIs, image registry, service-account roles (needs gcloud auth login)

@@ -4,167 +4,248 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ReportLens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e3e3de;
-    --accent: #2f6fdf; --accent-soft: #e8effc; --ok: #1f7a3f; --ok-soft: #e3f3e8;
-    --warn: #9a6200; --warn-soft: #fbf0dc; --bad: #b42318; --bad-soft: #fde8e6;
-    --code: #f1f1ee; --shimmer: #ececea;
+    --bg: #f5f6f8; --surface: #ffffff; --surface-2: #f0f2f5; --text: #0f172a; --muted: #5b6475;
+    --faint: #8a93a3; --line: #e3e6eb; --line-strong: #cfd4dc;
+    --accent: #1f4fd1; --accent-hover: #1a43b3; --accent-soft: #edf2ff; --accent-text: #ffffff;
+    --ok: #157a3c; --ok-soft: #e7f5ec; --warn: #a15c07; --warn-soft: #fdf3e2;
+    --bad: #b42318; --bad-soft: #fdecea; --shimmer: #e8ebef;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .04), 0 4px 16px rgba(15, 23, 42, .05);
+    --radius: 12px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #151515; --panel: #1e1e1e; --text: #ececea; --muted: #a0a09a; --line: #333331;
-      --accent: #7aa7ff; --accent-soft: #1d2a44; --ok: #6fcf8f; --ok-soft: #173222;
-      --warn: #f0b85a; --warn-soft: #3a2c12; --bad: #ff8a80; --bad-soft: #3d1b18;
-      --code: #262624; --shimmer: #2c2c2a;
+      --bg: #0b0f17; --surface: #121826; --surface-2: #19202f; --text: #e7eaf0; --muted: #9ba4b4;
+      --faint: #6f7889; --line: #232c3d; --line-strong: #323d52;
+      --accent: #7ea2ff; --accent-hover: #9ab6ff; --accent-soft: #1a2546; --accent-text: #0b0f17;
+      --ok: #6fd391; --ok-soft: #13291c; --warn: #f2bb62; --warn-soft: #2f2412;
+      --bad: #ff8f86; --bad-soft: #351a18; --shimmer: #222a3a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
     }
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font: 15px/1.6 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
-  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
   a { color: var(--accent); }
-  h1 { font-size: 24px; margin: 0; letter-spacing: -.01em; }
-  h1 .lens { color: var(--accent); }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
-       margin: 0 0 10px; }
-  h3 { font-size: 14px; margin: 14px 0 6px; }
-  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
-           flex-wrap: wrap; }
-  header nav { font-size: 13px; }
-  .sub { color: var(--muted); margin: 4px 0 0; }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-  .chip { font-size: 12px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line);
-          color: var(--muted); background: var(--panel); }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-           padding: 16px; margin-top: 14px; }
+  button, input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hidden { display: none !important; }
+  .muted { color: var(--muted); }
+  .label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+           color: var(--faint); margin: 0 0 10px; }
 
-  /* "What is this?" */
-  details.about > summary { cursor: pointer; font-weight: 600; list-style: none; }
+  /* top bar */
+  .topbar { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--surface) 88%, transparent);
+            backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--line); }
+  .topbar-inner { max-width: 1160px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center;
+                  gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px;
+           letter-spacing: -.01em; color: var(--text); text-decoration: none; }
+  .brand svg { flex: none; }
+  .corpus { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { font-size: 12px; font-weight: 500; padding: 2px 9px; border-radius: 999px;
+          background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+  .topbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .pw { display: flex; align-items: center; gap: 6px; }
+  .pw svg { color: var(--faint); }
+  .pw input { width: 150px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px;
+              background: var(--surface); font-size: 13px; }
+  .ghost { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 13px;
+           font-weight: 500; border-radius: 8px; border: 1px solid var(--line); background: var(--surface);
+           color: var(--text); text-decoration: none; cursor: pointer; transition: border-color .15s, background .15s; }
+  .ghost:hover { border-color: var(--line-strong); background: var(--surface-2); }
+
+  /* layout */
+  .shell { max-width: 1160px; margin: 0 auto; padding: 32px 16px 64px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 20px; }
+  .stack > * + * { margin-top: 16px; }
+
+  /* hero + question box */
+  .hero h1 { font-size: 28px; line-height: 1.25; letter-spacing: -.02em; margin: 0; }
+  .hero p.sub { margin: 6px 0 20px; color: var(--muted); max-width: 640px; }
+  .askbox { display: flex; align-items: flex-end; gap: 10px; padding: 10px 10px 10px 16px;
+            background: var(--surface); border: 1px solid var(--line-strong); border-radius: 14px;
+            box-shadow: var(--shadow); transition: border-color .15s, box-shadow .15s; }
+  .askbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow); }
+  .askbox textarea { flex: 1; min-height: 52px; max-height: 200px; resize: vertical; border: 0; outline: 0;
+                     background: transparent; padding: 6px 0; font-size: 16px; }
+  .askbox textarea::placeholder { color: var(--faint); }
+  .primary { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 0;
+             border-radius: 10px; background: var(--accent); color: var(--accent-text); font-weight: 600;
+             cursor: pointer; transition: background .15s, transform .1s; }
+  .primary:hover { background: var(--accent-hover); }
+  .primary:active { transform: scale(.98); }
+  .primary[disabled] { opacity: .65; cursor: wait; }
+  .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .segmented { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface-2);
+               border: 1px solid var(--line); border-radius: 10px; flex-wrap: wrap; }
+  .segmented input { position: absolute; opacity: 0; pointer-events: none; }
+  .segmented label { padding: 5px 12px; font-size: 13px; font-weight: 500; color: var(--muted);
+                     border-radius: 7px; cursor: pointer; transition: background .15s, color .15s; }
+  .segmented label:hover { color: var(--text); }
+  .segmented input:checked + label { background: var(--surface); color: var(--text);
+                                     box-shadow: 0 1px 2px rgba(15, 23, 42, .08); }
+  .segmented input:focus-visible + label { outline: 2px solid var(--accent); }
+  .hint { font-size: 13px; color: var(--muted); margin: 0; flex: 1 1 260px; }
+  .examples { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+              margin-top: 20px; }
+  .example { display: flex; flex-direction: column; justify-content: flex-start; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+             background: var(--surface); font-size: 13.5px; color: var(--text); cursor: pointer;
+             transition: border-color .15s, transform .15s, box-shadow .15s; }
+  .example span { display: block; font-size: 11px; font-weight: 600; letter-spacing: .05em;
+                  text-transform: uppercase; color: var(--faint); margin-bottom: 4px; }
+  .example:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }
+
+  /* "How it works" */
+  details.about > summary { cursor: pointer; font-weight: 600; list-style: none; display: flex;
+                            align-items: center; gap: 8px; }
   details.about > summary::-webkit-details-marker { display: none; }
-  details.about > summary::before { content: "▸"; display: inline-block; width: 1em;
-                                    color: var(--muted); transition: transform .2s; }
-  details.about[open] > summary::before { transform: rotate(90deg); }
-  .about p { margin: 8px 0; }
-  .flow { display: flex; align-items: stretch; gap: 6px; margin: 12px 0 4px; flex-wrap: wrap; }
-  .flow .box { flex: 1 1 120px; border: 1px solid var(--line); border-radius: 8px;
-               padding: 8px 10px; font-size: 13px; background: var(--bg); }
-  .flow .box b { display: block; font-size: 13px; }
-  .flow .box span { color: var(--muted); font-size: 12px; }
-  .flow .arrow { align-self: center; color: var(--muted); }
-  .techniques { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  details.about > summary::after { content: ""; margin-left: auto; width: 8px; height: 8px;
+                                   border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint);
+                                   transform: rotate(45deg); transition: transform .2s; }
+  details.about[open] > summary::after { transform: rotate(-135deg); }
+  .about p { margin: 12px 0; color: var(--muted); }
+  .about h3 { font-size: 14px; margin: 18px 0 8px; }
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 0; padding: 0;
+          list-style: none; counter-reset: flow; }
+  .flow li { counter-increment: flow; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+             background: var(--surface-2); font-size: 13px; }
+  .flow li b { display: block; }
+  .flow li b::before { content: counter(flow) ". "; color: var(--accent); }
+  .flow li span { color: var(--muted); font-size: 12px; }
+  .techniques { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
                 margin: 0; padding: 0; list-style: none; }
-  .techniques li { font-size: 13px; border-left: 3px solid var(--accent-soft); padding: 2px 0 2px 8px; }
-  .techniques li b { display: block; }
-  .techniques .state { font-size: 11px; color: var(--muted); }
+  .techniques li { font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px;
+                   padding: 10px 12px; }
+  .techniques li b { display: block; color: var(--text); }
+  .techniques .state { font-size: 11px; color: var(--faint); }
 
-  /* the question form */
-  form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  textarea { flex: 1 1 100%; min-height: 64px; resize: vertical; padding: 10px; font: inherit;
-             color: var(--text); background: var(--panel); border: 1px solid var(--line);
-             border-radius: 8px; }
-  textarea:focus, select:focus, input:focus { outline: 2px solid var(--accent-soft);
-                                               border-color: var(--accent); }
-  input[type=password] { font: inherit; padding: 8px 10px; border-radius: 8px; color: var(--text);
-                         border: 1px solid var(--line); background: var(--panel); }
-  select, button { font: inherit; padding: 8px 12px; border-radius: 8px;
-                   border: 1px solid var(--line); background: var(--panel); color: var(--text); }
-  button[type=submit] { background: var(--accent); border-color: var(--accent); color: #fff;
-                        font-weight: 600; margin-left: auto; cursor: pointer;
-                        transition: transform .1s, filter .2s; }
-  button[type=submit]:hover { filter: brightness(1.08); }
-  button[type=submit]:active { transform: scale(.97); }
-  button[disabled] { opacity: .6; cursor: wait; }
-  .hint { flex: 1 1 100%; font-size: 13px; color: var(--muted); margin: 0; }
-  .examples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-  .examples button { font-size: 13px; padding: 4px 10px; color: var(--muted); cursor: pointer;
-                     transition: border-color .2s, color .2s; }
-  .examples button:hover { border-color: var(--accent); color: var(--accent); }
-
-  /* progress: the pipeline strip and the steps */
-  .progress-head { display: flex; justify-content: space-between; align-items: baseline; }
-  .timer { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .pipeline { display: flex; gap: 4px; margin: 4px 0 14px; padding: 0; list-style: none; }
-  .pipeline li { flex: 1; min-width: 0; text-align: center; font-size: 12px; color: var(--muted);
-                 position: relative; padding-top: 30px; transition: opacity .3s; }
-  .pipeline li::before { content: ""; position: absolute; top: 4px; left: 50%; width: 20px; height: 20px;
-                         margin-left: -10px; border-radius: 50%; border: 2px solid var(--line);
-                         background: var(--panel); transition: background .3s, border-color .3s; }
-  .pipeline li::after { content: ""; position: absolute; top: 14px; left: calc(50% + 14px);
-                        right: calc(-50% + 14px); height: 2px; background: var(--line);
-                        transition: background .4s; }
+  /* progress */
+  .progress-head { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .progress-head .now { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis;
+                        white-space: nowrap; min-width: 0; }
+  .progress-head .spinner { width: 14px; height: 14px; flex: none; border: 2px solid var(--accent);
+                            border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; }
+  .progress-head.finished .spinner { animation: none; border-color: var(--ok); background: var(--ok); }
+  .timer { margin-left: auto; font-size: 13px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .pipeline { display: flex; margin: 0; padding: 0; list-style: none; }
+  .pipeline li { flex: 1; min-width: 0; text-align: center; font-size: 12px; font-weight: 500;
+                 color: var(--faint); position: relative; padding-top: 28px; transition: opacity .3s; }
+  .pipeline li::before { content: ""; position: absolute; top: 2px; left: 50%; width: 18px; height: 18px;
+                         margin-left: -9px; border-radius: 50%; border: 2px solid var(--line-strong);
+                         background: var(--surface); z-index: 1; transition: background .3s, border-color .3s;
+                         box-sizing: border-box; }
+  .pipeline li::after { content: ""; position: absolute; top: 10px; left: 50%; width: 100%; height: 2px;
+                        background: var(--line); transition: background .4s; }
   .pipeline li:last-child::after { display: none; }
-  .pipeline li .detail { display: block; font-size: 11px; min-height: 1.4em; overflow: hidden;
-                         text-overflow: ellipsis; white-space: nowrap; }
-  .pipeline li.active { color: var(--accent); font-weight: 600; }
-  .pipeline li.active::before { border-color: var(--accent); animation: pulse 1.2s ease-out infinite; }
+  .pipeline li .detail { display: block; font-size: 11px; font-weight: 400; min-height: 1.5em;
+                         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
+  .pipeline li.active { color: var(--accent); }
+  .pipeline li.active::before { border-color: var(--accent); background: var(--accent-soft);
+                                animation: pulse 1.2s ease-out infinite; }
   .pipeline li.done { color: var(--text); }
   .pipeline li.done::before { content: "✓"; color: #fff; background: var(--ok); border-color: var(--ok);
-                              font-size: 12px; line-height: 16px; font-weight: 700; }
+                              font-size: 11px; line-height: 14px; font-weight: 700; }
   .pipeline li.done::after { background: var(--ok); }
-  .pipeline li.skipped { opacity: .35; }
+  .pipeline li.skipped { opacity: .4; }
   @keyframes pulse {
     0% { box-shadow: 0 0 0 0 var(--accent-soft); }
-    70% { box-shadow: 0 0 0 9px transparent; }
+    70% { box-shadow: 0 0 0 8px transparent; }
     100% { box-shadow: 0 0 0 0 transparent; }
   }
-  ol.steps { margin: 0; padding: 0; list-style: none; }
-  ol.steps li { margin: 4px 0; display: flex; gap: 8px; align-items: baseline;
-                animation: slide-in .35s ease-out both; }
-  .stage { font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+  details.log { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  details.log summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  ol.steps { margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; }
+  ol.steps li { padding: 3px 0; display: flex; gap: 8px; align-items: baseline;
+                animation: slide-in .3s ease-out both; }
+  .stage { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
            background: var(--accent-soft); color: var(--accent); }
   .stage.corrective { background: var(--warn-soft); color: var(--warn); }
   .stage.self-rag { background: var(--ok-soft); color: var(--ok); }
-  .stage.server { background: var(--code); color: var(--muted); }
-  ol.steps li.current::after { content: ""; width: 10px; height: 10px; flex: none; align-self: center;
-                               border: 2px solid var(--accent); border-right-color: transparent;
-                               border-radius: 50%; animation: spin .8s linear infinite; }
+  .stage.server { background: var(--surface-2); color: var(--muted); }
   @keyframes slide-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .waking { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
-  .skeleton { margin-top: 12px; }
-  .skeleton div { height: 12px; border-radius: 6px; margin: 8px 0;
-                  background: linear-gradient(90deg, var(--code) 25%, var(--shimmer) 50%, var(--code) 75%);
+  .waking { font-size: 13px; color: var(--muted); margin: 12px 0 0; }
+  .skeleton { margin-top: 16px; }
+  .skeleton div { height: 12px; border-radius: 6px; margin: 10px 0;
+                  background: linear-gradient(90deg, var(--surface-2) 25%, var(--shimmer) 50%, var(--surface-2) 75%);
                   background-size: 200% 100%; animation: shimmer 1.4s linear infinite; }
   .skeleton div:nth-child(2) { width: 85%; } .skeleton div:nth-child(3) { width: 60%; }
   @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
-  /* the answer */
-  .reveal { animation: slide-in .45s ease-out both; }
-  .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
-  .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--code);
-           color: var(--muted); }
+  /* results */
+  .results { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 360px; align-items: start; }
+  .results aside { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 16px;
+                   max-height: calc(100vh - 92px); }
+  .reveal { animation: slide-in .4s ease-out both; }
+  .question-echo { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+  .answer { font-size: 17px; line-height: 1.7; white-space: pre-wrap; margin: 0; }
+  a.cite { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px;
+           padding: 0 4px; margin: 0 1px; border-radius: 5px; font-size: 11px; font-weight: 600;
+           vertical-align: 2px; line-height: 1; text-decoration: none; background: var(--accent-soft);
+           color: var(--accent); transition: background .15s, color .15s; }
+  a.cite:hover { background: var(--accent); color: var(--accent-text); }
+  .meta { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 18px; padding-top: 14px;
+          border-top: 1px solid var(--line); }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500;
+           padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
   .badge.ok { background: var(--ok-soft); color: var(--ok); }
   .badge.warn { background: var(--warn-soft); color: var(--warn); }
   .badge.bad { background: var(--bad-soft); color: var(--bad); }
-  .answer { font-size: 16px; white-space: pre-wrap; margin: 0; }
-  a.cite { color: var(--accent); text-decoration: none; font-weight: 600; border-radius: 4px;
-           padding: 0 1px; transition: background .2s; }
-  a.cite:hover { background: var(--accent-soft); }
-  .sources { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
-  .source { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
-            animation: slide-in .4s ease-out both; transition: border-color .2s, background .2s; }
-  .source.lit { border-color: var(--accent); background: var(--accent-soft); }
-  .source b { margin-right: 6px; color: var(--accent); }
-  .source a { word-break: break-all; }
-  details.chunk { border-top: 1px solid var(--line); padding: 8px 0; transition: background .4s; }
-  details.chunk summary { cursor: pointer; }
-  details.chunk.cited summary { font-weight: 600; }
-  details.chunk.flash { background: var(--accent-soft); }
-  .chunk pre, pre.query { white-space: pre-wrap; word-break: break-word; background: var(--code);
-                          padding: 10px; border-radius: 8px; font-size: 13px; margin: 8px 0 0; }
-  .error { background: var(--bad-soft); color: var(--bad); border-color: var(--bad); }
-  .hidden { display: none; }
-  .muted { color: var(--muted); }
-  footer { margin-top: 28px; font-size: 12px; color: var(--muted); text-align: center; }
+  details.query { margin-top: 14px; }
+  details.query summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+  pre { white-space: pre-wrap; word-break: break-word; background: var(--surface-2); border: 1px solid var(--line);
+        padding: 12px; border-radius: 8px; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+        margin: 8px 0 0; }
+  .sources { display: flex; flex-direction: column; gap: 8px; }
+  .source { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line);
+            border-radius: 10px; font-size: 13px; cursor: pointer; text-align: left; background: var(--surface);
+            animation: slide-in .35s ease-out both; transition: border-color .15s, background .15s; }
+  .source:hover, .source.lit { border-color: var(--accent); background: var(--accent-soft); }
+  .source .num { flex: none; min-width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center;
+                 font-size: 11px; font-weight: 700; background: var(--accent-soft); color: var(--accent); }
+  .source .what { min-width: 0; }
+  .source .what b { display: block; font-weight: 600; }
+  .source .what span { color: var(--muted); font-size: 12px; word-break: break-all; }
+  .evidence-card { display: flex; flex-direction: column; min-height: 0; }
+  #chunks { overflow-y: auto; margin: 0 -20px -20px; padding: 0 20px 12px; }
+  details.chunk { border-top: 1px solid var(--line); padding: 10px 0; transition: background .4s; }
+  details.chunk summary { cursor: pointer; font-size: 13px; display: flex; gap: 8px; align-items: baseline;
+                          list-style: none; }
+  details.chunk summary::-webkit-details-marker { display: none; }
+  details.chunk summary .n { font-weight: 700; color: var(--faint); min-width: 26px; }
+  details.chunk summary .src { flex: 1; min-width: 0; }
+  details.chunk summary .score { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  details.chunk.cited summary .n { color: var(--accent); }
+  details.chunk.cited summary .src { font-weight: 600; }
+  details.chunk.flash { background: var(--accent-soft); border-radius: 8px; }
+  .error { background: var(--bad-soft); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+  footer { margin-top: 40px; font-size: 12px; color: var(--faint); text-align: center; }
 
-  @media (max-width: 560px) {
-    .flow { flex-direction: column; }
-    .flow .box { flex: none; }
-    .flow .arrow { transform: rotate(90deg); }
+  @media (max-width: 920px) {
+    .results { grid-template-columns: 1fr; }
+    .results aside { position: static; max-height: none; }
+    #chunks { max-height: 420px; }
+  }
+  @media (max-width: 640px) {
+    .topbar { position: static; }  /* it wraps to three rows here: too tall to keep pinned */
+    .shell { padding-top: 20px; }
+    .hero h1 { font-size: 22px; }
+    .topbar-actions { margin-left: 0; width: 100%; }
+    .pw { flex: 1; } .pw input { width: 100%; }
+    .flow { grid-template-columns: 1fr; }
+    .askbox { flex-direction: column; align-items: stretch; }
+    .primary { justify-content: center; }
     .pipeline li { font-size: 11px; }
+    .pipeline li .detail { display: none; }
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -172,41 +253,125 @@
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <div>
-      <h1>Report<span class="lens">Lens</span></h1>
-      <p class="sub">Ask questions about Canadian companies' annual reports. Every answer cites
-        the pages it came from.</p>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/" aria-label="ReportLens home">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+        <rect width="26" height="26" rx="7" fill="var(--accent)"/>
+        <circle cx="11.5" cy="11.5" r="5" fill="none" stroke="var(--accent-text)" stroke-width="2.2"/>
+        <path d="M15.3 15.3 L19.5 19.5" stroke="var(--accent-text)" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>
+      ReportLens
+    </a>
+    <div class="corpus" id="corpus"></div>
+    <div class="topbar-actions">
+      <span id="password-row" class="pw hidden">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <label class="hidden" for="password">Demo password</label>
+        <input id="password" type="password" autocomplete="current-password" placeholder="Demo password">
+      </span>
+      <a class="ghost" href="https://github.com/madeleine68/Reportlens" target="_blank" rel="noopener noreferrer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.7 1.7.3 2.9.1 3.2.8.8 1.2 1.9 1.2 3.1 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5Z"/></svg>
+        GitHub
+      </a>
     </div>
-    <nav><a href="https://github.com/madeleine68/Reportlens" target="_blank"
-            rel="noopener noreferrer">Source on GitHub</a></nav>
-  </header>
-  <div class="chips" id="corpus"></div>
+  </div>
+</header>
 
-  <details class="panel about" id="about">
-    <summary>What is this?</summary>
+<main class="shell stack">
+  <section class="hero">
+    <h1>Ask the annual reports</h1>
+    <p class="sub">Questions about RBC, Scotiabank and BCE, answered from their annual reports,
+      financial tables and a knowledge graph. Every claim cites the page it came from.</p>
+
+    <form id="ask">
+      <div class="askbox">
+        <textarea id="question" maxlength="500" required rows="2" aria-label="Your question"
+          placeholder="e.g. How did RBC's and Scotiabank's dividends per share compare in 2024?"></textarea>
+        <button type="submit" class="primary" id="go">Ask</button>
+      </div>
+      <div class="controls">
+        <div class="segmented" role="radiogroup" aria-label="Source">
+          <input type="radio" name="source" id="src-auto" value="auto" checked><label for="src-auto">Auto</label>
+          <input type="radio" name="source" id="src-text" value="text"><label for="src-text">Text</label>
+          <input type="radio" name="source" id="src-corrective" value="corrective"><label for="src-corrective">Corrective</label>
+          <input type="radio" name="source" id="src-sql" value="sql"><label for="src-sql">SQL</label>
+          <input type="radio" name="source" id="src-graph" value="graph"><label for="src-graph">Graph</label>
+        </div>
+        <p class="hint" id="hint"></p>
+      </div>
+    </form>
+    <div class="examples" id="examples"></div>
+  </section>
+
+
+  <section id="error" class="card error hidden" role="alert"></section>
+
+  <section id="progress" class="card hidden" aria-live="polite">
+    <div class="progress-head" id="progress-head">
+      <span class="spinner" aria-hidden="true"></span>
+      <span class="now" id="now">Sending your question…</span>
+      <span class="timer" id="timer"></span>
+    </div>
+    <ol class="pipeline" id="pipeline">
+      <li data-node="route">Route<span class="detail"></span></li>
+      <li data-node="search">Search<span class="detail"></span></li>
+      <li data-node="grade">Grade<span class="detail"></span></li>
+      <li data-node="answer">Answer<span class="detail"></span></li>
+      <li data-node="check">Check<span class="detail"></span></li>
+    </ol>
+    <p class="waking hidden" id="waking">Still working. If the server was asleep, the first
+      answer takes 30–60 s while it loads its models; later ones are quicker.</p>
+    <div class="skeleton" id="skeleton"><div></div><div></div><div></div></div>
+    <details class="log">
+      <summary>Step log</summary>
+      <ol class="steps" id="steps"></ol>
+    </details>
+  </section>
+
+  <section id="result" class="results hidden">
+    <article class="card reveal">
+      <p class="label">Answer</p>
+      <p class="question-echo" id="question-echo"></p>
+      <p class="answer" id="answer"></p>
+      <details class="query hidden" id="query-box">
+        <summary>Query that ran</summary>
+        <pre id="query"></pre>
+      </details>
+      <div class="meta" id="badges"></div>
+    </article>
+    <aside>
+      <div class="card reveal" id="sources-panel">
+        <p class="label">Sources cited</p>
+        <div class="sources" id="sources"></div>
+      </div>
+      <div class="card reveal evidence-card">
+        <p class="label" id="evidence-label">Evidence the model saw</p>
+        <div id="chunks"></div>
+      </div>
+    </aside>
+  </section>
+
+  <details class="card about" id="about">
+    <summary>How it works</summary>
     <p>ReportLens answers questions about the annual reports of <b>RBC</b>, <b>Scotiabank</b> and
       <b>BCE</b> for fiscal 2021–2024: 12 reports split into about 6,000 passages, plus the
       headline figures pulled out of their financial tables and a knowledge graph of segments,
-      subsidiaries and executives. It's a portfolio project that puts several retrieval
-      (RAG) techniques side by side, with an evaluation suite measuring what each one adds.</p>
+      subsidiaries and executives. It's a portfolio project that puts several retrieval (RAG)
+      techniques side by side, with an evaluation suite measuring what each one adds.</p>
 
     <h3>How a question is answered</h3>
-    <div class="flow" aria-label="Question, router, search, answer, check">
-      <div class="box"><b>Question</b><span>yours</span></div>
-      <div class="arrow">→</div>
-      <div class="box"><b>Router</b><span>a small model picks the best source</span></div>
-      <div class="arrow">→</div>
-      <div class="box"><b>Search</b><span>report text, financial tables (SQL) or the graph</span></div>
-      <div class="arrow">→</div>
-      <div class="box"><b>Answer</b><span>written only from what was found, with [n] citations</span></div>
-      <div class="arrow">→</div>
-      <div class="box"><b>Check</b><span>every claim traced back to a source</span></div>
-    </div>
+    <ol class="flow">
+      <li><b>Question</b><span>yours</span></li>
+      <li><b>Router</b><span>a small model picks the best source</span></li>
+      <li><b>Search</b><span>report text, financial tables (SQL) or the graph</span></li>
+      <li><b>Answer</b><span>written only from what was found, with citations</span></li>
+      <li><b>Check</b><span>every claim traced back to a source</span></li>
+    </ol>
 
     <h3>Techniques inside</h3>
-    <ul class="techniques" id="techniques">
+    <ul class="techniques">
       <li><b>Hybrid search</b>keyword and meaning-based search, merged by rank</li>
       <li><b>Reranking</b>a cross-encoder rereads the top 40 passages and keeps the best 5</li>
       <li><b>Metadata filters</b>"RBC 2023" in a question limits the search to that report</li>
@@ -218,78 +383,19 @@
       <li><b>Agentic router</b>picks the source, and falls back to text search if it fails</li>
     </ul>
 
-    <p class="muted">Watch the progress panel while it answers: each step appears as it happens.
-      The demo is password-protected and rate-limited because it runs on a free LLM quota.
+    <p>The demo is password-protected and rate-limited because it runs on a free LLM quota.
       Answers can be wrong; check the cited pages.</p>
   </details>
 
-  <form id="ask" class="panel">
-    <textarea id="question" maxlength="500" required
-      placeholder="e.g. How did RBC's and Scotiabank's dividends per share compare in 2024?"></textarea>
-    <label class="muted" for="source">Source</label>
-    <select id="source">
-      <option value="auto">auto (router picks)</option>
-      <option value="text">text search</option>
-      <option value="corrective">corrective RAG</option>
-      <option value="sql">SQL (financial tables)</option>
-      <option value="graph">graph (Neo4j)</option>
-    </select>
-    <span id="password-row" class="hidden">
-      <label class="muted" for="password">Demo password</label>
-      <input id="password" type="password" autocomplete="current-password" size="14">
-    </span>
-    <button type="submit" id="go">Ask</button>
-    <p class="hint" id="hint"></p>
-    <div class="examples" id="examples"></div>
-  </form>
-
-  <section id="error" class="panel error hidden" role="alert"></section>
-
-  <section id="progress" class="panel hidden" aria-live="polite">
-    <div class="progress-head">
-      <h2>How it's answering</h2>
-      <span class="timer" id="timer"></span>
-    </div>
-    <ol class="pipeline" id="pipeline">
-      <li data-node="route">Route<span class="detail"></span></li>
-      <li data-node="search">Search<span class="detail"></span></li>
-      <li data-node="grade">Grade<span class="detail"></span></li>
-      <li data-node="answer">Answer<span class="detail"></span></li>
-      <li data-node="check">Check<span class="detail"></span></li>
-    </ol>
-    <ol class="steps" id="steps"></ol>
-    <p class="waking hidden" id="waking">Still working. If the server was asleep, the first
-      answer takes 30–60 s while it loads its models; later ones are quicker.</p>
-    <div class="skeleton" id="skeleton"><div></div><div></div><div></div></div>
-  </section>
-
-  <section id="result" class="hidden">
-    <div class="panel reveal">
-      <h2>Answer</h2>
-      <div class="badges" id="badges"></div>
-      <p class="answer" id="answer"></p>
-      <pre class="query hidden" id="query"></pre>
-    </div>
-    <div class="panel reveal" id="sources-panel">
-      <h2>Sources cited</h2>
-      <div class="sources" id="sources"></div>
-    </div>
-    <div class="panel reveal">
-      <h2>Everything the answer model saw</h2>
-      <div id="chunks"></div>
-    </div>
-  </section>
-
-  <footer>ReportLens · answers by an LLM from the reports' text, tables and graph ·
-    not financial advice</footer>
+  <footer>ReportLens · answers by an LLM from the reports' text, tables and graph · not financial advice</footer>
 </main>
 
 <script>
 const EXAMPLES = [
-  "How did RBC's and Scotiabank's dividends per share compare in 2024?",
-  "Who replaced Nadine Ahn as RBC's CFO?",
-  "Why did BCE's employee headcount change in 2024?",
-  "Which bank had the higher CET1 ratio in 2024, RBC or Scotiabank?",
+  ["Comparison", "How did RBC's and Scotiabank's dividends per share compare in 2024?"],
+  ["Relationship", "Who replaced Nadine Ahn as RBC's CFO?"],
+  ["Explanation", "Why did BCE's employee headcount change in 2024?"],
+  ["Figure", "Which bank had the higher CET1 ratio in 2024, RBC or Scotiabank?"],
 ];
 const HINTS = {
   auto: "A small model reads the question and picks text search, SQL or the graph.",
@@ -299,6 +405,7 @@ const HINTS = {
   graph: "The model writes a Cypher query over segments, subsidiaries and executives.",
 };
 const ROUTE_NAMES = { vector: "text", sql: "SQL", graph: "graph", web: "web", none: "none" };
+const COMPANY_NAMES = { rbc: "RBC", scotiabank: "Scotiabank", bce: "BCE" };
 const $ = (id) => document.getElementById(id);
 let selfRag = false;
 
@@ -312,13 +419,21 @@ function el(tag, attrs = {}, ...children) {
   return node;
 }
 
+function selectedSource() {
+  return document.querySelector('input[name="source"]:checked').value;
+}
+
 function pages(list) {
   if (!list.length) return "";
   return (list.length === 1 ? "page " : "pages ") + list.join(", ");
 }
 
+function companyName(c) {
+  return COMPANY_NAMES[c] || c.toUpperCase();
+}
+
 function sourceLabel(c) {
-  return c.company === "web" ? "web" : `${c.company.toUpperCase()} ${c.year}, ${pages(c.pages)}`;
+  return c.company === "web" ? "web" : `${companyName(c.company)} ${c.year}, ${pages(c.pages)}`;
 }
 
 // --- the pipeline strip: each event marks what just finished and what runs next ----------
@@ -376,8 +491,8 @@ function finishPipeline(r) {
 let started = 0, ticker = null, wakeTimer = null;
 
 function addStep(stage, text) {
-  for (const li of $("steps").children) li.classList.remove("current");
-  $("steps").append(el("li", { class: "current" }, el("span", { class: `stage ${stage}` }, stage), text));
+  $("steps").append(el("li", {}, el("span", { class: `stage ${stage}` }, stage), text));
+  $("now").textContent = text.charAt(0).toUpperCase() + text.slice(1);
   $("waking").classList.add("hidden");
   clearTimeout(wakeTimer);
   wakeTimer = setTimeout(() => $("waking").classList.remove("hidden"), 8000);
@@ -386,6 +501,7 @@ function addStep(stage, text) {
 function startProgress(source) {
   $("steps").replaceChildren();
   resetPipeline(source);
+  $("progress-head").classList.remove("finished");
   $("skeleton").classList.remove("hidden");
   $("waking").classList.add("hidden");
   $("progress").classList.remove("hidden");
@@ -402,12 +518,12 @@ function stopProgress() {
   clearTimeout(wakeTimer);
   $("waking").classList.add("hidden");
   $("skeleton").classList.add("hidden");
-  for (const li of $("steps").children) li.classList.remove("current");
 }
 
 function showError(message) {
   $("error").textContent = message;
   $("error").classList.remove("hidden");
+  $("now").textContent = "Stopped";
 }
 
 // --- the answer ----------------------------------------------------------------------------
@@ -419,8 +535,8 @@ function answerWithLinks(text) {
   for (const match of text.matchAll(/\[(\d+(?:\s*,\s*\d+)*)\]/g)) {
     out.append(text.slice(last, match.index));
     for (const n of match[1].split(",").map((s) => parseInt(s, 10))) {
-      const link = el("a", { class: "cite", href: `#chunk-${n}` }, `[${n}]`);
-      link.addEventListener("click", () => openChunk(n));
+      const link = el("a", { class: "cite", href: `#chunk-${n}`, "aria-label": `source ${n}` }, String(n));
+      link.addEventListener("click", (event) => { event.preventDefault(); openChunk(n); });
       link.addEventListener("mouseenter", () => $(`source-${n}`)?.classList.add("lit"));
       link.addEventListener("mouseleave", () => $(`source-${n}`)?.classList.remove("lit"));
       out.append(link);
@@ -435,6 +551,7 @@ function openChunk(n) {
   const chunk = $(`chunk-${n}`);
   if (!chunk) return;
   chunk.open = true;
+  chunk.scrollIntoView({ behavior: "smooth", block: "nearest" });
   chunk.classList.add("flash");
   setTimeout(() => chunk.classList.remove("flash"), 1200);
 }
@@ -443,44 +560,53 @@ function badge(text, kind = "") {
   return el("span", { class: `badge ${kind}` }, text);
 }
 
-function showAnswer(r) {
+function sourceCard(c, i) {
+  const what = c.url
+    ? el("div", { class: "what" }, el("b", {}, "Web"), el("span", {}, c.url))
+    : el("div", { class: "what" }, el("b", {}, `${companyName(c.company)} · ${c.year} report`),
+         el("span", {}, pages(c.pages)));
+  const card = el("button", { type: "button", class: "source", id: `source-${c.number}` },
+    el("span", { class: "num" }, String(c.number)), what);
+  card.addEventListener("click", () => c.url ? window.open(c.url, "_blank", "noopener") : openChunk(c.number));
+  card.style.animationDelay = `${0.1 + i * 0.06}s`;
+  return card;
+}
+
+function chunkItem(c, n, cited) {
+  const summary = el("summary", {},
+    el("span", { class: "n" }, `[${n}]`),
+    el("span", { class: "src" }, sourceLabel(c) + (c.section ? ` · ${c.section}` : "")),
+    el("span", { class: "score" }, c.score.toFixed(2)));
+  return el("details", { class: `chunk${cited ? " cited" : ""}`, id: `chunk-${n}` }, summary, el("pre", {}, c.text));
+}
+
+function showAnswer(r, question) {
   stopProgress();
   finishPipeline(r);
-  addStep("server", `answered in ${((performance.now() - started) / 1000).toFixed(1)} s`);
-  $("steps").lastChild.classList.remove("current");
+  const seconds = ((performance.now() - started) / 1000).toFixed(1);
+  addStep("server", `answered in ${seconds} s`);
+  $("progress-head").classList.add("finished");
 
+  const route = r.route ? ROUTE_NAMES[r.route.source] || r.route.source : r.source;
   $("badges").replaceChildren(
-    r.found ? badge("answered", "ok") : badge("not found", "warn"),
-    ...(r.route ? [badge(`route: ${ROUTE_NAMES[r.route.source] || r.route.source}`)] : [badge(`source: ${r.source}`)]),
-    ...(r.supported === true ? [badge("supported by its sources", "ok")] : []),
-    ...(r.supported === false ? [badge("some claims unsupported", "bad")] : []),
-    badge(`${r.input_tokens + r.output_tokens} tokens`),
-    badge(`${r.latency_s.toFixed(1)} s in LLM calls`),
+    r.found ? badge("Answered", "ok") : badge("Not found in the reports", "warn"),
+    ...(r.supported === true ? [badge("Supported by its sources", "ok")] : []),
+    ...(r.supported === false ? [badge("Some claims unsupported", "bad")] : []),
+    badge(`${r.route ? "Route" : "Source"}: ${route}`),
+    badge(`${(r.input_tokens + r.output_tokens).toLocaleString()} tokens`),
+    badge(`${seconds} s`),
   );
+  $("question-echo").textContent = question;
   $("answer").replaceChildren(answerWithLinks(r.answer));
   $("query").textContent = r.query || "";
-  $("query").classList.toggle("hidden", !r.query);
+  $("query-box").classList.toggle("hidden", !r.query);
 
-  // the source cards arrive one after another
-  $("sources").replaceChildren(...r.citations.map((c, i) => {
-    const where = c.url
-      ? el("a", { href: c.url, target: "_blank", rel: "noopener noreferrer" }, c.url)
-      : sourceLabel(c);
-    const card = el("div", { class: "source", id: `source-${c.number}` }, el("b", {}, `[${c.number}]`), where);
-    card.style.animationDelay = `${0.15 + i * 0.08}s`;
-    return card;
-  }));
+  $("sources").replaceChildren(...r.citations.map(sourceCard));
   $("sources-panel").classList.toggle("hidden", !r.citations.length);
 
   const cited = new Set(r.citations.map((c) => c.number));
-  $("chunks").replaceChildren(...r.chunks.map((c, i) => {
-    const n = i + 1;
-    const summary = el("summary", {},
-      `[${n}] ${sourceLabel(c)}` + (c.section ? ` · ${c.section}` : "") +
-      ` · score ${c.score.toFixed(2)}` + (cited.has(n) ? " · cited" : ""));
-    return el("details", { class: `chunk${cited.has(n) ? " cited" : ""}`, id: `chunk-${n}` },
-      summary, el("pre", {}, c.text));
-  }));
+  $("evidence-label").textContent = `Evidence the model saw (${r.chunks.length})`;
+  $("chunks").replaceChildren(...r.chunks.map((c, i) => chunkItem(c, i + 1, cited.has(i + 1))));
   if (!r.chunks.length) $("chunks").replaceChildren(el("p", { class: "muted" }, "No sources."));
 
   // restart the reveal animation for each new answer
@@ -488,9 +614,10 @@ function showAnswer(r) {
     panel.style.animation = "none"; void panel.offsetWidth; panel.style.animation = "";
   }
   $("result").classList.remove("hidden");
+  $("result").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function handle(kind, data) {
+function handle(kind, data, question) {
   if (kind === "route") {
     addStep("router", `→ ${ROUTE_NAMES[data.source] || data.source}: ${data.reason}`);
     setNode("route", "done", ROUTE_NAMES[data.source] || data.source);
@@ -502,7 +629,7 @@ function handle(kind, data) {
     addStep(data.stage, text);
     advance(data.stage, data.text);
   }
-  else if (kind === "answer") showAnswer(data);
+  else if (kind === "answer") showAnswer(data, question);
   else if (kind === "error") showError(data.detail);
 }
 
@@ -531,7 +658,7 @@ async function ask(question, source) {
       buffer = buffer.slice(end + 2);
       const kind = block.match(/^event: (.*)$/m)?.[1];
       const data = block.match(/^data: (.*)$/m)?.[1];
-      if (kind && data) handle(kind, JSON.parse(data));
+      if (kind && data) handle(kind, JSON.parse(data), question);
     }
   }
 }
@@ -540,9 +667,10 @@ $("ask").addEventListener("submit", async (event) => {
   event.preventDefault();
   const question = $("question").value.trim();
   if (!question) return;
-  const source = $("source").value;
+  const source = selectedSource();
   $("error").classList.add("hidden");
   $("result").classList.add("hidden");
+  $("examples").classList.add("hidden");  // make room for the answer
   startProgress(source);
   $("go").disabled = true;
   $("go").textContent = "Answering…";
@@ -560,15 +688,25 @@ $("ask").addEventListener("submit", async (event) => {
   }
 });
 
+// Enter asks; Shift+Enter adds a line.
+$("question").addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+    event.preventDefault();
+    $("ask").requestSubmit();
+  }
+});
+
 // --- page setup ----------------------------------------------------------------------------
 
-// "What is this?" starts closed, then stays as the visitor left it.
+// "How it works" starts closed, then stays as the visitor left it.
 try { $("about").open = localStorage.getItem("reportlens-about") === "open"; } catch {}
 $("about").addEventListener("toggle", () => {
   try { localStorage.setItem("reportlens-about", $("about").open ? "open" : "closed"); } catch {}
 });
 
-$("source").addEventListener("change", () => { $("hint").textContent = HINTS[$("source").value]; });
+for (const radio of document.querySelectorAll('input[name="source"]')) {
+  radio.addEventListener("change", () => { $("hint").textContent = HINTS[selectedSource()]; });
+}
 $("hint").textContent = HINTS.auto;
 
 // A public demo has a password (GET /health says so); remember it for this tab only.
@@ -581,18 +719,17 @@ fetch("/health").then((r) => r.json()).then((health) => {
   try { $("password").value = sessionStorage.getItem("reportlens-password") || ""; } catch {}
 }).catch(() => {});
 
-// The corpus loaded, as chips under the title.
+// The corpus loaded, as chips in the top bar.
 fetch("/meta").then((r) => r.json()).then((meta) => {
-  const names = { rbc: "RBC", scotiabank: "Scotiabank", bce: "BCE" };
-  const years = meta.years.length ? `fiscal ${meta.years[0]}–${meta.years[meta.years.length - 1]}` : "";
+  const years = meta.years.length ? `FY${meta.years[0]}–${meta.years[meta.years.length - 1]}` : "";
   $("corpus").replaceChildren(
-    ...meta.companies.map((c) => el("span", { class: "chip" }, names[c] || c)),
+    ...meta.companies.map((c) => el("span", { class: "chip" }, companyName(c))),
     ...(years ? [el("span", { class: "chip" }, years)] : []),
   );
 }).catch(() => {});
 
-for (const q of EXAMPLES) {
-  const button = el("button", { type: "button" }, q);
+for (const [kind, q] of EXAMPLES) {
+  const button = el("button", { type: "button", class: "example" }, el("span", {}, kind), q);
   button.addEventListener("click", () => { $("question").value = q; $("question").focus(); });
   $("examples").append(button);
 }

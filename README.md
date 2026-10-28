@@ -52,11 +52,13 @@ All on the same 53 questions (numeric, trend, comparison, relationship, chart-on
 | Text search only (Phase 2 stack + corrective RAG) | 0.74 | 0.92 | 0.68 | 7.2s |
 | **Router** (text, SQL or graph per question) | **0.88** | 0.93 | 0.66 | 8.3s |
 | **Router + corrective RAG** (the default) | **0.89** | 0.94 | 0.69 | 11.0s |
-| Router + corrective RAG + Self-RAG | 0.78 | **0.97** | 0.72 | 15.1s |
+| Router + corrective RAG + multi-source answers | 0.87 | **0.99** | 0.68 | 14.1s |
+| Router + corrective RAG + Self-RAG | 0.78 | 0.97 | 0.72 | 15.1s |
 
 - **Most of the gain comes from the router.** Sending figures to SQL and relationship questions to the graph lifts correctness from 0.74 to 0.88.
 - **Corrective RAG adds little on top** (+0.01). Once the router handles the figures, few questions are left where grading and rewriting the search matter.
 - **Self-RAG made answers worse.** Its checker flagged correct arithmetic and SQL/graph facts as unsupported, and the revision then dropped them, or refused. Faithfulness went up because the answers said less. It stays off, and the reasons are [explained below](#phase-4-agentic-layer-).
+- **Multi-source answers fixed figures the tables round, but not the total** (0.87, within noise). Two headcount questions went from wrong to right; the chart questions didn't improve. They stay off by default.
 - **Recall@5 is lower for routed answers** because SQL and graph answers cite table rows rather than retrieved chunks, so fewer of their pages count as retrieved. Correctness is the number to compare.
 
 From the Phase 1 baseline (correctness 0.42 on 31 questions) to the routed stack, each phase's step is measured in [Results in detail](#results-in-detail).
@@ -95,7 +97,7 @@ uv run python scripts/ask.py --sql "Which bank had the higher CET1 ratio in 2024
 | 1. Baseline RAG + evals | Parse → chunk → embed → store; vector search; answers with citations; eval runner | ✅ Done: baseline recorded |
 | 2. Better retrieval | Contextual chunking, keyword + hybrid search, reranking, metadata filters | ✅ Done: correctness 0.42 → 0.79 on the baseline's questions |
 | 3. Structured data | Real tables, SQL tool, knowledge graph, chart summaries | ✅ Done: SQL tool (0.80 vs 0.67 on numeric questions), graph tool, 379 chart summaries with a reserved search slot (recall 0.85 vs 0.80) |
-| 4. Agentic layer | Router, Self-RAG, Corrective RAG | 🟡 Router 0.88 (one LangGraph graph), router + corrective RAG 0.89, Self-RAG 0.78 (off), step limits and error handling done; left: measuring multi-source answers |
+| 4. Agentic layer | Router, Self-RAG, Corrective RAG | ✅ Done: router 0.88 (one LangGraph graph), router + corrective RAG 0.89, Self-RAG 0.78 (off), multi-source answers 0.87 (off), step limits and error handling |
 | 5. Ship | API, UI, deployment | 🟡 API (`/ask`, `/ask/stream` with progress events) and web UI built; deployed on Cloud Run; demo video to record |
 
 **Corpus:** 12 reports ingested, also parsed with tables: BCE, RBC and Scotiabank, fiscal 2021–2024. TD and Shopify reports are downloaded but not ingested.
@@ -197,6 +199,13 @@ In the routed setup the slot barely gets a chance: the router sends two of the f
   - **Facts from SQL and graph rows:** "RBC 13.2%, Scotiabank 13.1%" or "Scotiabank's CFO was Raj Viswanathan" were flagged too. The revision then gave up, and 3 correct answers became refusals.
 
   Likely fixes: tell the checker that arithmetic on cited figures counts as supported, skip the check for SQL and graph answers, and never let a revision turn an answer into a refusal.
+- **Multi-source answers:** 0.87, against 0.89 without them: within noise. Question by question:
+  - **Fixed:** two headcount questions (BCE's and Bell's at the end of 2024) went from wrong to right: the table rounds to 40,000, and the text chunks carried the exact 40,390.
+  - **Not fixed:** BCE's segment shares (q051–q053) still miss; the chart holding them doesn't reach the top 5 text chunks.
+  - **Lost:** five answers dropped to partly correct, but most were near-identical to before ("$4,581 million" graded against "$4.6 billion"), so judge noise; two left out a detail the expected answer has.
+  - **A bug it found:** one comparison query added a computed "difference" row with no page, which crashed turning rows into sources, so the question fell back to text search and was refused. Rows without a company, year or page now become sources with blanks; the same question now answers correctly.
+
+  Multi-source answers stay off by default: they use about 4× the tokens per question (2,690 against 714) for no overall gain.
 - **Run-to-run noise:** the same setup can score about ±0.02 differently, because the LLMs and the judge don't answer identically every time. Differences smaller than that aren't read as real.
 
 **Where the Phase 2 stack still fails** (10 of 42 questions wrong, 2 partly right): mostly numbers whose right page *was* retrieved but whose label got lost, such as an *adjusted* figure reported instead of the *reported* one (Phase 3: tables), and comparisons that need two reports at once (Phase 4: agentic layer).
@@ -224,6 +233,7 @@ The main choices, each with its alternatives and evidence in [`DECISIONS.md`](DE
 | **One fast-LLM router call per question; text search as default and fallback** | Route accuracy 0.83 vs 0.71 for always using text search. A source that finds nothing or fails hands the question to text search. |
 | **Self-RAG kept but off** | It lowered correctness from 0.89 to 0.78 by flagging correct arithmetic and SQL/graph facts. Kept as a measured negative result, with the likely fixes noted. |
 | **Charts in a reserved slot, off for now** | Mixed in with text, charts crowded it out (recall 0.81); a reserved slot found all 4 chart-only questions (0.85). The router still sends most chart questions to SQL. |
+| **Multi-source answers built but off** | Answering SQL/graph questions from rows plus text fixed figures the tables round but scored 0.87 vs 0.89 overall, at several times the input tokens. |
 | **Progress events instead of token streaming** | Citations are parsed and answers checked only once complete, so streaming tokens would show unchecked text. The UI shows the route and each step as they happen. |
 | **Cloud Run + Neon + AuraDB, behind a demo password and a daily cap** | It scales to zero and fits the free tiers. The daily question cap is stored in Postgres, so it survives the instance stopping. |
 
@@ -374,7 +384,7 @@ flowchart LR
   - Names are matched loosely ("David I. McKay" = "David McKay", "Scotiabank& Trust" = "Scotiabank & Trust"), and LLM output is cached, so rebuilding the graph is free.
 - **Graph query tool** (`sources/graph_tool.py`, `sources/cypher_safety.py`; try it with `scripts/ask.py --graph "..."`): the same steps as the SQL tool. The fast LLM is told the graph's labels, relationships and company ids and writes one Cypher query, which must return each relationship's company, report year and page so the answer can cite it. Neo4j Community has no read-only users, so there are two layers of protection: (1) a check on the query's text (with strings and comments blanked out first) allows only read clauses, rejects `CALL` (procedures), `LOAD CSV` (reads files and URLs), `USE` (other databases) and `apoc.*`/`dbms.*` functions, allows only the graph's 4 labels and 3 relationship types, and adds a 50-row limit; (2) the query runs in a read transaction, which the server refuses to write in, with a 5-second timeout, and only the first 50 rows are fetched. A rejected or failing query goes back to the LLM with the reason. Example: *"How did RBC's CFO change over the years?"* → `MATCH (e:Executive)-[r:HOLDS_ROLE]->(c:Company {id:'rbc'}) WHERE r.role = 'cfo' ...` → "Nadine Ahn in 2021 [1], 2022 [2] and 2023 [3]. In 2024 the CFO changed to Katherine Gibson [4]."
 
-### Phase 4: Agentic layer 🟡
+### Phase 4: Agentic layer ✅
 
 A router decides which source fits each question, and two self-checking loops catch weak retrieval and unsupported answers.
 
@@ -462,7 +472,7 @@ flowchart TD
   - **One revision at most** (`SELF_RAG_MAX_REVISIONS=1`). An answer that still fails is returned marked unsupported rather than refused, because the checker can be wrong too.
   - **Its own prompt, not the eval judge's:** the check follows each sentence's citations, while the eval's faithfulness judge splits the whole answer into claims. Both use the fast model, so a gain in faithfulness is read with care; correctness and the revision rate matter more.
 - **Safety limits:** corrective RAG stops after `AGENT_MAX_STEPS` and refuses rather than loop; a source that raises an error falls back to text search; grading and rewriting fail open (keep every chunk, search the same query again). A rate-limit error is never failed open: it stops the question, so an eval run can't record a quota error as a wrong answer.
-- **Multi-source answers** (`agents/combined.py`, `MULTI_SOURCE=true`, off until measured): a question routed to SQL or the graph is answered from the rows *and* the top 5 text chunks, numbered as one source list, in a single main-LLM call that replaces the tool's own answer call. The rows give exact figures; the text gives what rows can't hold: reasons, context, chart breakdowns, and figures the table rounds (BCE's headcount: 40,000 in the table, 40,390 in the text, which the combined answer now gets right). If there are no rows, it answers from the text alone. Splitting a question into sub-questions for different sources isn't built: the eval set has almost no questions that need it.
+- **Multi-source answers** (`agents/combined.py`, `MULTI_SOURCE=true`, off by default: 0.87 vs 0.89, see results above): a question routed to SQL or the graph is answered from the rows *and* the top 5 text chunks, numbered as one source list, in a single main-LLM call that replaces the tool's own answer call. The rows give exact figures; the text gives what rows can't hold: reasons, context, chart breakdowns, and figures the table rounds (BCE's headcount: 40,000 in the table, 40,390 in the text, which the combined answer now gets right). If there are no rows, it answers from the text alone. Splitting a question into sub-questions for different sources isn't built: the eval set has almost no questions that need it.
 
 ### Phase 5: Ship 🟡
 

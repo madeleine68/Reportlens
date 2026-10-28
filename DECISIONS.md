@@ -536,3 +536,28 @@ The fast model writes the SQL (`SqlQuery` via `llm.structured`); if it is reject
 **Decision:** `agents/graph.py` holds the graph; the router is passed in as a function and each source's answer function comes from `agents/routed.py`, so `ask()` and `answer_routed()` keep their signatures and the API, CLI and evals are unchanged. Behaviour kept: nothing found or a tool error goes to text search, with the first attempt's tokens added; a rate-limit error stops the question; a source that isn't on (web, or the graph without Neo4j) goes straight to text search; Self-RAG runs on either branch only when `SELF_RAG=true`. The step limit is `AGENT_MAX_STEPS`, as in the other graphs.
 
 **Eval evidence:** none needed for behaviour: the existing routed tests pass unchanged, plus 7 graph tests (paths, costs, rate limits, check node, streamed events). A live question (q045) took `graph` and answered correctly. Built on a separate branch while the multi-source eval ran, so that run's code didn't change mid-run.
+
+## 2026-10-26 — Charts get a reserved search slot, off by default
+
+**Context:** All 384 chart candidates were described by the vision model and loaded as `kind='figure'` chunks. Mixed in with text (`RETRIEVAL_FIGURES=true`), they mostly crowded the text out: recall 0.81 vs 0.80 without charts, MRR 0.61 vs 0.63. Scotiabank's page 17 alone has 5 charts, which pushed the right text chunk down without the right chart reaching the top 5.
+
+**Options considered:**
+- Charts mixed in with text: measured, no gain.
+- Boost chart scores: a tuned constant that would differ by question.
+- **A reserved slot:** search text and charts separately, and let the best chart replace the 5th text chunk.
+
+**Decision:** `RETRIEVAL_FIGURE_SLOTS=N` (`retrieval/search.py`) runs the same retriever twice, once per `kind`, keeps only charts matching the company/year filters (the retrievers fall back to every report when a filter matches nothing, which here would add another report's chart), and sorts the merged list by reranker score. Off by default.
+
+**Eval evidence:** retrieval-only, n=53: recall 0.85, MRR 0.65, all 4 chart-only questions found (1 without charts), p50 8.4 s vs 4.7 s (a second rerank). Answer-level, routed + corrective: 0.87 vs 0.89, within noise, because the router sends most chart questions to SQL, so the slot rarely gets used. It stays off until chart questions are routed to text search.
+
+## 2026-10-28 — Multi-source answers for SQL and graph routes, off by default
+
+**Context:** The router sends each question to one source. Some answers routed to SQL missed what only the text has: BCE's headcount is 40,000 in the table and 40,390 in the text; reasons and chart breakdowns aren't in any table. This is the simple form of the Phase 4 item "multi-step questions" (the owner chose to start simple; Claude wrote the prompt).
+
+**Options considered:**
+- A planner that splits a question into sub-questions per source: the eval set has almost no questions that need it, and it adds an LLM call per step.
+- **Rows plus text in one answer:** for SQL and graph routes, give the main LLM the rows and the top 5 text chunks as one numbered source list.
+
+**Decision:** `agents/combined.py` with `MULTI_SOURCE=true` replaces the SQL and graph answerers; the rows become citable sources with their company, year and page, and one main-LLM call (`COMBINED_SYSTEM`) answers, preferring the row when a row and a passage disagree. Still one main-model call per question, with longer input. No rows: it answers from the text; nothing at all: it refuses without an LLM call.
+
+**Eval evidence:** routed + corrective, n=53: 0.87 vs 0.89 (noise ±0.02), faithfulness 0.99, 2,690 vs 714 tokens per question. Fixed: both headcount questions (q023, q040). Not fixed: BCE's segment shares (q051–q053), whose chart doesn't reach the top 5 text chunks. Lost: five partial answers, most near-identical to before (judge noise). The run also found a bug: a retried SQL query added a computed "difference" row with no page, which crashed turning rows into sources, so q043 fell back to text search and was refused; rows without a company, year or page now get blanks (same fix in `sql_tool.as_answer`), and q043 then answered correctly live. Off by default: no overall gain at about 4× the tokens.

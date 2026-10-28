@@ -120,7 +120,7 @@ Keep this section up to date when commands change.
 
 ## Phase plan
 
-**Current phase: 4** (Phases 0–3 complete; Phase 4 left: measuring multi-step (multi-source) answers; update this line as phases complete)
+**Current phase: 5** (Phases 0–4 complete; Phase 5 left: first live question on the deployment, demo video; update this line as phases complete)
 
 ### Phase 0: Setup
 
@@ -162,7 +162,7 @@ Keep this section up to date when commands change.
 - [x] LangGraph state graph; router node picks `vector | sql | graph | web | none` (router written by Claude at the owner's request on 2026-10-16: `agents/router.py` + `agents/routed.py` with fallback to vector; route accuracy 0.83 vs 0.71 for always-vector; LangGraph graph `agents/graph.py` built 2026-10-26 (route → ask_routed → fallback → optional Self-RAG check; same behaviour, router logic unchanged); full routed eval 2026-10-21: correctness 0.88 vs 0.74 for corrective text search alone, n=53)
 - [x] Self-RAG: decide if retrieval is needed; after answering, check the answer is supported and retry once if not (built 2026-10-17 in `agents/self_rag.py` as a LangGraph graph after the router; "retrieval needed?" is the router's `none` route; off by default (`SELF_RAG=false`); measured 2026-10-22: correctness 0.78 vs 0.89 without it (n=53), because the checker flags arithmetic and SQL/graph facts as unsupported and the revision drops them or refuses; see DECISIONS.md 2026-10-17)
 - [x] Corrective RAG: grade retrieved chunks; if weak, rewrite the query and retry, then fall back to Tavily (built 2026-10-17 as a LangGraph state graph in `agents/corrective.py`, tested with stubs and on 3 trial questions; the router's text-search route uses it unless `ROUTED_CORRECTIVE=false`; measured on n=53: corrective alone 0.74, router alone 0.88, router + corrective 0.89; see DECISIONS.md 2026-10-17)
-- [ ] Multi-step questions (e.g. comparing companies across SQL and text) (simple version built 2026-10-26 in `agents/combined.py`, prompt written by Claude at the owner's request: questions routed to SQL or the graph are answered from their rows plus the top text chunks in one call, `MULTI_SOURCE=true`, off by default; trial: q023 headcount now exact; full n=53 eval pending; a planner that splits questions into sub-questions is not built)
+- [x] Multi-step questions (e.g. comparing companies across SQL and text) (simple version built 2026-10-26 in `agents/combined.py`, prompt written by Claude at the owner's request: questions routed to SQL or the graph are answered from their rows plus the top text chunks in one call, `MULTI_SOURCE=true`, off by default; trial: q023 headcount now exact; measured 2026-10-28 on n=53: 0.87 vs 0.89 without it (noise; two headcount questions fixed, chart shares q051–q053 still miss), so it stays off; the eval also exposed a crash on computed rows without a page, fixed; a planner that splits questions into sub-questions is not built)
 - [x] Max-step limit and clear error handling on every node (router: falls back to text search if its call fails; routed answers: a source that raises falls back to text search; corrective RAG: `AGENT_MAX_STEPS` as LangGraph's recursion limit, refusal past it, grade/rewrite failures fail open; Self-RAG: a failed revision keeps the earlier answer; rate-limit errors are never failed open)
 
 ### Phase 5: Ship

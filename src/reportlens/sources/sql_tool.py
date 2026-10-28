@@ -235,10 +235,10 @@ def as_answer(result: RowsAnswer) -> Answer:
     chunks = [
         RetrievedChunk(
             chunk_id=f"sql-row-{i}",
-            company=row[index["company"]] if "company" in index else "",
-            year=row[index["report_year"]] if "report_year" in index else 0,
+            company=(row[index["company"]] if "company" in index else None) or "",
+            year=(row[index["report_year"]] if "report_year" in index else None) or 0,
             section=None,
-            pages=[row[page_col]] if page_col is not None else [],
+            pages=[row[page_col]] if page_col is not None and row[page_col] is not None else [],
             text=format_row(i, result.columns, row),
             score=0.0,
         )

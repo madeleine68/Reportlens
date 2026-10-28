@@ -39,16 +39,20 @@ ROW_SECTIONS: dict[RowSource, str] = {"sql": "financial table", "graph": "knowle
 def rows_as_chunks(
     source: RowSource, columns: list[str], rows: list[list[Any]]
 ) -> list[RetrievedChunk]:
-    """Rows as sources: each keeps its company, report year and page, so it can be cited."""
+    """Rows as sources: each keeps its company, report year and page, so it can be cited.
+
+    A computed row (e.g. a difference the query added) has no company, year or page; it gets
+    blanks instead of failing the whole question.
+    """
     index = {name: i for i, name in enumerate(columns)}
     page_col = index.get("source_page", index.get("page"))
     return [
         RetrievedChunk(
             chunk_id=f"{source}-row-{i}",
-            company=row[index["company"]] if "company" in index else "",
-            year=row[index["report_year"]] if "report_year" in index else 0,
+            company=(row[index["company"]] if "company" in index else None) or "",
+            year=(row[index["report_year"]] if "report_year" in index else None) or 0,
             section=ROW_SECTIONS[source],
-            pages=[row[page_col]] if page_col is not None else [],
+            pages=[row[page_col]] if page_col is not None and row[page_col] is not None else [],
             text=row_text(columns, row),
             score=0.0,
         )

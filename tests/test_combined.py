@@ -51,6 +51,13 @@ def test_rows_become_citable_sources() -> None:
     assert "[1]" not in chunk.text  # numbering comes from the combined source list
 
 
+def test_a_computed_row_without_a_page_still_becomes_a_source() -> None:
+    # q043's retried query added a "difference" row with no year or page; it used to crash
+    rows = [*ROWS, ["difference", None, "net_income", 5633, "CAD millions", None]]
+    chunks = rows_as_chunks("sql", COLUMNS, rows)
+    assert (chunks[1].company, chunks[1].year, chunks[1].pages) == ("difference", 0, [])
+
+
 def test_rows_and_text_are_numbered_together_and_both_cited() -> None:
     chat = FakeChat("BCE had 40,390 employees [2]; the table rounds this to 40,000 [1].")
     answer = answer_combined("How many employees?", "sql", fetch(ROWS), lambda q: TEXT, chat)
